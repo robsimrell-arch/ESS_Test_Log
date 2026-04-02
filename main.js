@@ -833,27 +833,27 @@ const DEFAULT_CONFIG = {
   chamber_part_matrix: {},
 };
 const AT_COLS = [
+  { key: 'part_number',   label: 'Part Number' },
+  { key: 'uut_serial',    label: 'UUT Serial' },
   { key: 'start_time',    label: 'Start Time' },
-  { key: 'sid',           label: 'Sess' },
   { key: 'operator',      label: 'Started By' },
+  { key: 'end_time',      label: 'End Time' },
   { key: 'closed_by',     label: 'Closed By' },
+  { key: 'result',        label: 'Result' },
+  { key: 'sid',           label: 'Sess' },
   { key: 'chamber',       label: 'Chamber' },
   { key: 'station',       label: 'Station' },
-  { key: 'part_number',   label: 'Part Number' },
   { key: 'test_type',     label: 'Test Type' },
   { key: 'channel',       label: 'Ch' },
-  { key: 'uut_serial',    label: 'UUT Serial' },
   { key: 'cable_serial',  label: 'Cable Serial' },
   { key: 'backplane',     label: 'Backplane #' },
   { key: 'notes',         label: 'Operator Notes' },
   { key: 'failure_notes', label: 'Failure Notes' },
-  { key: 'result',        label: 'Result' },
-  { key: 'end_time',      label: 'End Time' },
 ];
 
 let allTestsData = [];
-let atSortKey = 'start_time';
-let atSortRev = false;
+let atSortKey = 'end_time';
+let atSortRev = true;
 
 function buildATHead() {
   const headRow = $('#at-head-row');
