@@ -69,8 +69,8 @@ function showView(id) {
       if (!sess.minimized && !sess.ended) {
         sess.minimized = true;
         sess.el.style.display = 'none';
-        // Silent save (no toast, no await — fire and forget)
-        saveSession(sess, true).catch(() => {});
+        // Silent save (no toast, no await — fire and forget), skip prompt sync
+        saveSession(sess, true, true).catch(() => {});
       }
     }
     refreshMinBar();
@@ -458,7 +458,7 @@ function getSessionRowData(sess) {
   });
 }
 
-async function saveSession(sess, silent = false) {
+async function saveSession(sess, silent = false, skipSync = false) {
   // Pull latest from DB into DOM before reading DOM (avoids overwriting with stale tabs)
   await refreshActiveSessions();
   const data = getSessionRowData(sess);
@@ -466,7 +466,7 @@ async function saveSession(sess, silent = false) {
   if (!silent) toast('Session saved.');
   
   // Trigger sync on manual save
-  if (typeof isSyncEnabled === 'function' && isSyncEnabled()) {
+  if (!skipSync && typeof isSyncEnabled === 'function' && isSyncEnabled()) {
     syncAll();
   }
 }
@@ -597,7 +597,8 @@ async function endSession(sess) {
     sess.endTime = new Date().toISOString();
     sess.ended = true;
     if (sess.tickInterval) clearInterval(sess.tickInterval);
-    await saveSession(sess);
+    // Silent save, skip sync (we will sync after dbSetEnd)
+    await saveSession(sess, true, true);
     const ts = fmtTs(sess.endTime);
     sess.el.querySelector('.lbl-end').textContent = `End: ${ts}`;
     sess.el.querySelector('.lbl-end').style.color = 'var(--red)';
@@ -656,7 +657,7 @@ function exportSession(sess) {
 function minimizeSession(sess) {
   sess.minimized = true;
   sess.el.style.display = 'none';
-  saveSession(sess, true).catch(() => {});
+  saveSession(sess, true, true).catch(() => {});
   showView('view-dashboard');
   refreshMinBar();
   refreshStats();
