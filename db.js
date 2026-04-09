@@ -117,6 +117,7 @@ export async function dbSaveEntries(sid, rows) {
     }
   }
 
+  console.log(`[DB] Saving ${upserts.length} entries for session ${sid}:`, upserts);
   if (upserts.length) await db.uut_entries.bulkPut(upserts);
   await db.sessions.update(sid, { sync_status: 'pending', updated_at: now });
 }

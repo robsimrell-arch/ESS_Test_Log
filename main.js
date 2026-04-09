@@ -459,8 +459,16 @@ function getSessionRowData(sess) {
 }
 
 async function saveSession(sess, silent = false) {
-  await dbSaveEntries(sess.sid, getSessionRowData(sess));
+  // Pull latest from DB into DOM before reading DOM (avoids overwriting with stale tabs)
+  await refreshActiveSessions();
+  const data = getSessionRowData(sess);
+  await dbSaveEntries(sess.sid, data);
   if (!silent) toast('Session saved.');
+  
+  // Trigger sync on manual save
+  if (typeof isSyncEnabled === 'function' && isSyncEnabled()) {
+    syncAll();
+  }
 }
 
 async function startSession(sess) {
@@ -530,6 +538,9 @@ function startTick(sess) {
 async function endSession(sess) {
   if (sess.ended) return;
 
+  // Refresh UI from DB to avoid closing with stale blank data if synced recently
+  await refreshActiveSessions();
+
   // Validation: cable serial + result required for rows with UUT
   const data = getSessionRowData(sess);
   const missingCable = [];
@@ -596,6 +607,12 @@ async function endSession(sess) {
     sess.el.querySelector('.lbl-elapsed').style.color = 'var(--muted)';
     sess.el.querySelector('.btn-end-sess').disabled = true;
     await dbSetEnd(sess.sid, sess.endTime, closingOp);
+
+    // Immediate sync after session end
+    if (typeof isSyncEnabled === 'function' && isSyncEnabled()) {
+      console.log('[App] Triggering immediate sync after session end');
+      syncAll();
+    }
 
     // Build a plain session object to hand directly to the report preview
     const closedSession = {
