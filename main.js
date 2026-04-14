@@ -543,6 +543,14 @@ async function endSession(sess) {
 
   // Validation: cable serial + result required for rows with UUT
   const data = getSessionRowData(sess);
+
+  // Require at least one UUT serial (cannot end a session with no data)
+  const rowsWithUUT = data.filter(r => r.uut_serial);
+  if (rowsWithUUT.length === 0) {
+    toast('Cannot end session: no UUT data has been entered. Please add at least one UUT serial number.', true);
+    return;
+  }
+
   const missingCable = [];
   const missingResult = [];
   for (const r of data) {
@@ -594,6 +602,23 @@ async function endSession(sess) {
       toast('Please enter the closing operator name.', true);
       return;
     }
+
+    // Re-validate from DOM right before committing — catches any sync race that
+    // occurred between the "End Session" click (when the modal opened) and now.
+    const confirmData = getSessionRowData(sess);
+    const confirmMissingResult = confirmData.filter(r => r.uut_serial && !r.result).map(r => `Ch ${r.channel}`);
+    const confirmMissingUUT = confirmData.filter(r => r.uut_serial).length === 0;
+    if (confirmMissingUUT) {
+      toast('Cannot end session: no UUT data found. Please re-enter data and try again.', true);
+      closeModal();
+      return;
+    }
+    if (confirmMissingResult.length) {
+      toast(`Pass/Fail/Aborted result required on: ${confirmMissingResult.join(', ')}`, true);
+      closeModal();
+      return;
+    }
+
     sess.endTime = new Date().toISOString();
     sess.ended = true;
     if (sess.tickInterval) clearInterval(sess.tickInterval);
