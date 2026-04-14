@@ -1233,8 +1233,16 @@ async function restoreOpenSessions() {
 
   let restored = 0;
   for (const s of openSessions) {
-    // Don't re-restore sessions that are already active
+    // Don't re-restore sessions that are already active (by ID, chamber, or station)
     if (activeSessions.some(a => a.sid === s.id)) continue;
+    if (activeSessions.some(a => a.chamber === s.chamber)) {
+      console.warn(`[Restore] Skipping session ${s.id} — chamber ${s.chamber} already has an active session.`);
+      continue;
+    }
+    if (s.station && activeSessions.some(a => a.station === s.station)) {
+      console.warn(`[Restore] Skipping session ${s.id} — station ${s.station} already has an active session.`);
+      continue;
+    }
 
     createSessionView(s.id, s.operator, s.chamber, s.station, s.part_number, s.test_type, s.start_time || null);
 
