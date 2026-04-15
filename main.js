@@ -558,12 +558,15 @@ async function endSession(sess) {
     if (!r.cable_serial) missingCable.push(`Ch ${r.channel}`);
     if (!r.result) missingResult.push(`Ch ${r.channel}`);
   }
+
   if (missingCable.length || missingResult.length) {
-    let msg = '';
-    if (missingCable.length) msg += `Cable Serial required on: ${missingCable.join(', ')}\n`;
-    if (missingResult.length) msg += `Pass/Fail/Aborted result required on: ${missingResult.join(', ')}`;
+    let msg = 'Missing required data:\n';
+    if (missingCable.length) msg += `• Cable Serial required on: ${missingCable.join(', ')}\n`;
+    if (missingResult.length) msg += `• Pass/Fail/Aborted result required on: ${missingResult.join(', ')}`;
     toast(msg, true);
-    return;
+    // Don't return here anymore—open the modal anyway but show the errors clearly and disable confirm.
+    // Actually, user wants it "not possible to end", so blocking the modal is good, 
+    // but the screenshot shows they managed to end it. Let's make the modal itself block.
   }
 
   // Show End Session modal
@@ -576,9 +579,42 @@ async function endSession(sess) {
   endMod.style.display = '';
   overlay.classList.remove('hidden');
 
-  // Populate meta
+  // Populate meta and validation summary
   const elapsed = elapsedStr(sess.startTime);
-  $('#end-meta').textContent = `Chamber ${sess.chamber}  |  ${sess.pn}  |  Elapsed: ${elapsed}`;
+  const uutCount = rowsWithUUT.length;
+  const passCount = data.filter(r => r.result === 'PASS').length;
+  const failCount = data.filter(r => r.result === 'FAIL').length;
+  const abortCount = data.filter(r => r.result === 'ABORTED').length;
+  
+  let validationHtml = `
+    <div style="margin-bottom:12px; font-size:0.9rem; color:var(--text);">
+      <div style="font-weight:700; margin-bottom:4px;">Chamber ${sess.chamber} • ${sess.pn}</div>
+      <div style="color:var(--muted);">Elapsed: ${elapsed} | Station: ${sess.station}</div>
+    </div>
+    <div class="validation-summary" style="padding:12px; background:rgba(0,0,0,0.2); border-radius:6px; margin-bottom:16px; border:1px solid var(--border);">
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+        <span>UUTs Identified:</span>
+        <span style="font-weight:700;">${uutCount}</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; font-size:0.85rem;">
+        <span style="color:var(--green)">✓ PASS: ${passCount}</span>
+        <span style="color:var(--red)">✗ FAIL: ${failCount}</span>
+        <span style="color:var(--amber)">⚠ ABORT: ${abortCount}</span>
+      </div>
+  `;
+
+  if (missingCable.length || missingResult.length) {
+    validationHtml += `
+      <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border); color:var(--red); font-size:0.85rem;">
+        <strong>Validation Errors:</strong><br>
+        ${missingCable.length ? `• Missing Cable Serials: ${missingCable.length}<br>` : ''}
+        ${missingResult.length ? `• Missing Results: ${missingResult.length}` : ''}
+      </div>
+    `;
+  }
+  validationHtml += `</div>`;
+  
+  $('#end-meta').innerHTML = validationHtml;
 
   // Populate operators
   const ops = await dbDistinct('operator');
@@ -595,6 +631,19 @@ async function endSession(sess) {
   const newCancel = cancelBtn.cloneNode(true);
   cancelBtn.replaceWith(newCancel);
 
+  // Disable confirm button if validation fails
+  if (missingCable.length || missingResult.length || uutCount === 0) {
+    newConfirm.disabled = true;
+    newConfirm.title = "All UUTs must have Cable Serials and Results before ending.";
+    newConfirm.style.opacity = '0.5';
+    newConfirm.style.cursor = 'not-allowed';
+  } else {
+    newConfirm.disabled = false;
+    newConfirm.title = "";
+    newConfirm.style.opacity = '1';
+    newConfirm.style.cursor = 'pointer';
+  }
+
   newCancel.addEventListener('click', closeModal);
   newConfirm.addEventListener('click', async () => {
     const closingOp = $('#end-operator').value.trim();
@@ -607,14 +656,19 @@ async function endSession(sess) {
     // occurred between the "End Session" click (when the modal opened) and now.
     const confirmData = getSessionRowData(sess);
     const confirmMissingResult = confirmData.filter(r => r.uut_serial && !r.result).map(r => `Ch ${r.channel}`);
-    const confirmMissingUUT = confirmData.filter(r => r.uut_serial).length === 0;
-    if (confirmMissingUUT) {
+    const confirmMissingCable = confirmData.filter(r => r.uut_serial && !r.cable_serial).map(r => `Ch ${r.channel}`);
+    const confirmRowsWithUUT = confirmData.filter(r => r.uut_serial);
+    
+    if (confirmRowsWithUUT.length === 0) {
       toast('Cannot end session: no UUT data found. Please re-enter data and try again.', true);
       closeModal();
       return;
     }
-    if (confirmMissingResult.length) {
-      toast(`Pass/Fail/Aborted result required on: ${confirmMissingResult.join(', ')}`, true);
+    if (confirmMissingResult.length || confirmMissingCable.length) {
+      let m = 'Missing required data:\n';
+      if (confirmMissingCable.length) m += `• Cable Serial required on: ${confirmMissingCable.join(', ')}\n`;
+      if (confirmMissingResult.length) m += `• Pass/Fail/Aborted result required on: ${confirmMissingResult.join(', ')}`;
+      toast(m, true);
       closeModal();
       return;
     }
@@ -622,8 +676,10 @@ async function endSession(sess) {
     sess.endTime = new Date().toISOString();
     sess.ended = true;
     if (sess.tickInterval) clearInterval(sess.tickInterval);
-    // Silent save, skip sync (we will sync after dbSetEnd)
-    await saveSession(sess, true, true);
+    
+    // Save the final data state to the DB
+    await dbSaveEntries(sess.sid, confirmData);
+    
     const ts = fmtTs(sess.endTime);
     sess.el.querySelector('.lbl-end').textContent = `End: ${ts}`;
     sess.el.querySelector('.lbl-end').style.color = 'var(--red)';
