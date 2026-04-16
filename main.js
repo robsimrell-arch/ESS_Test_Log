@@ -1093,7 +1093,43 @@ function applyATFilters() {
   const shown = rows.length;
   const suffix = shown < total ? '  —  filters active' : '';
   $('#at-count').textContent = `${shown} of ${total} record(s)${suffix}`;
+
+  // Refresh dropdowns to only show values present in the visible rows
+  updateATFilterDropdowns(rows);
 }
+
+/**
+ * Repopulate the dynamic filter dropdowns with only the distinct values
+ * that appear in the currently visible (filtered) row set.
+ * Preserves the current selection if it still exists in the new option list.
+ * Setting innerHTML/value programmatically does NOT fire input/change events,
+ * so there is no risk of triggering an infinite re-filter loop.
+ */
+function updateATFilterDropdowns(rows) {
+  const distinct = (key) =>
+    [...new Set(rows.map(r => String(r[key] ?? '')).filter(Boolean))].sort();
+
+  const repopulate = (id, vals) => {
+    const sel = $(`#${id}`);
+    const current = sel.value;
+    sel.innerHTML = '<option>All</option>' + vals.map(v => `<option>${v}</option>`).join('');
+    // Restore selected value if it still exists in the new list
+    if (current !== 'All' && vals.includes(current)) sel.value = current;
+  };
+
+  repopulate('at-chamber', distinct('chamber'));
+  repopulate('at-station', distinct('station'));
+  repopulate('at-type',    distinct('test_type'));
+  repopulate('at-part',    distinct('part_number'));
+
+  const chans = [...new Set(rows.map(r => r.channel).filter(c => c != null))]
+    .sort((a, b) => a - b).map(String);
+  repopulate('at-channel', chans);
+
+  repopulate('at-cable', distinct('cable_serial'));
+}
+
+
 
 /* ── Password-protected delete for All Tests rows ─────────────────────── */
 let _atDeleteTarget = null; // { rowData, trEl }
