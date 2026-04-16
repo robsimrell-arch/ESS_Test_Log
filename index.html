@@ -310,6 +310,36 @@
       </div>
     </div>
 
+
+    <!-- Delete Record (Password-Protected) modal -->
+    <div class="modal" id="modal-at-delete" style="display:none">
+      <div class="modal-header modal-header-red">
+        <h2>🗑️ Delete Record</h2>
+        <p class="modal-sub">This action is permanent and requires authorization.</p>
+      </div>
+      <div class="modal-body">
+        <div id="at-delete-info" style="
+          padding: 10px 14px;
+          background: rgba(255,60,60,.08);
+          border: 1px solid var(--red);
+          border-radius: 6px;
+          font-size: .88rem;
+          color: var(--text);
+          margin-bottom: 18px;
+          word-break: break-all;
+        "></div>
+        <label>Engineer Password</label>
+        <input type="password" id="at-delete-pw" class="modal-input" placeholder="Enter password…" autocomplete="off" />
+        <div id="at-delete-error" style="display:none;color:var(--red);font-size:.85rem;margin-top:8px;">
+          ❌ Incorrect password. Please try again.
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="at-delete-cancel">Cancel</button>
+        <button class="btn-danger" id="at-delete-confirm">🗑️ Delete Record</button>
+      </div>
+    </div>
+
     <!-- Report Preview Modal -->
     <div class="modal modal-wide" id="modal-report-preview" style="display:none">
       <div class="modal-header hide-on-print">

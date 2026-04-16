@@ -11,6 +11,7 @@ import db, {
   dbAllSessions, dbSessionEntries, dbDistinct,
   dbAllTests, dbGetOpenSessions, dbSearchUut,
   dbExportAll, dbImportAll,
+  dbDeleteUutEntry,
   fmtTs,
 } from './db.js';
 import { initSync, syncAll, startAutoSync, onSyncStatus, watchConnectivity, isSyncEnabled } from './sync.js';
@@ -972,6 +973,11 @@ function buildATHead() {
     });
     headRow.appendChild(th);
   }
+  // Non-sortable Delete column
+  const delTh = document.createElement('th');
+  delTh.textContent = '';
+  delTh.style.cssText = 'width:36px;text-align:center;';
+  headRow.appendChild(delTh);
 }
 
 async function loadAllTests() {
@@ -1061,12 +1067,92 @@ function applyATFilters() {
       if (c.key === 'closed_by' && !v) v = '—';
       return `<td>${v}</td>`;
     }).join('');
+
+    // Delete button cell
+    const delTd = document.createElement('td');
+    delTd.style.cssText = 'text-align:center;padding:2px 4px;';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-ghost at-delete-btn';
+    delBtn.title = 'Delete this record (password required)';
+    delBtn.innerHTML = '🗑️';
+    delBtn.style.cssText = 'padding:2px 6px;font-size:.9rem;line-height:1;color:var(--red);border-color:transparent;';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openATDeleteModal(r, tr);
+    });
+    delTd.appendChild(delBtn);
+    tr.appendChild(delTd);
+
     tbody.appendChild(tr);
   }
   const total = allTestsData.length;
   const shown = rows.length;
   const suffix = shown < total ? '  —  filters active' : '';
   $('#at-count').textContent = `${shown} of ${total} record(s)${suffix}`;
+}
+
+/* ── Password-protected delete for All Tests rows ─────────────────────── */
+let _atDeleteTarget = null; // { rowData, trEl }
+
+function openATDeleteModal(rowData, trEl) {
+  _atDeleteTarget = { rowData, trEl };
+  const overlay = $('#modal-overlay');
+  $$('.modal').forEach(m => m.style.display = 'none');
+  $('#modal-at-delete').style.display = '';
+  overlay.classList.remove('hidden');
+
+  // Show what will be deleted
+  const r = rowData;
+  $('#at-delete-info').textContent =
+    `UUT: ${r.uut_serial || '—'}  |  Session ${r.sid}  Ch ${r.channel}  |  ${r.result || 'No Result'}`;
+
+  // Reset password input (clone to clear all previous keydown listeners)
+  const oldPw = $('#at-delete-pw');
+  const newPw = oldPw.cloneNode(true);
+  newPw.value = '';
+  oldPw.replaceWith(newPw);
+  $('#at-delete-error').style.display = 'none';
+
+  // Wire up buttons (clone to remove old listeners)
+  const confirmBtn = $('#at-delete-confirm');
+  const cancelBtn  = $('#at-delete-cancel');
+  const newConfirm = confirmBtn.cloneNode(true);
+  const newCancel  = cancelBtn.cloneNode(true);
+  confirmBtn.replaceWith(newConfirm);
+  cancelBtn.replaceWith(newCancel);
+
+  newCancel.addEventListener('click', () => { _atDeleteTarget = null; closeModal(); });
+  newConfirm.addEventListener('click', confirmATDelete);
+  newPw.addEventListener('keydown', e => { if (e.key === 'Enter') confirmATDelete(); });
+
+  setTimeout(() => newPw.focus(), 80);
+}
+
+async function confirmATDelete() {
+  const pw = $('#at-delete-pw').value;
+  if (pw !== 'TEngineer') {
+    $('#at-delete-error').style.display = '';
+    $('#at-delete-pw').value = '';
+    $('#at-delete-pw').focus();
+    return;
+  }
+  if (!_atDeleteTarget) return;
+  const { rowData, trEl } = _atDeleteTarget;
+  _atDeleteTarget = null;
+
+  await dbDeleteUutEntry(rowData.sid, rowData.channel);
+
+  // Remove from local cache and re-render
+  allTestsData = allTestsData.filter(
+    r => !(r.sid === rowData.sid && r.channel === rowData.channel)
+  );
+  applyATFilters();
+
+  // Trigger sync if enabled
+  if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
+
+  closeModal();
+  toast(`Record deleted: ${rowData.uut_serial} (Sess ${rowData.sid} Ch ${rowData.channel}).`);
 }
 
 function exportAllTests() {

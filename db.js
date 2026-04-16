@@ -138,6 +138,26 @@ export async function dbSessionEntries(sid) {
   return Array.from(latestByChan.values()).sort((a, b) => a.channel - b.channel);
 }
 
+/**
+ * "Delete" a UUT entry by blanking all its data fields.
+ * The row stays in IndexedDB (needed for sync), but dbAllTests
+ * filters out rows with no uut_serial so it disappears from the UI.
+ */
+export async function dbDeleteUutEntry(sid, channel) {
+  const entries = await db.uut_entries.where('session_id').equals(sid).toArray();
+  const target = entries
+    .filter(e => e.channel === channel)
+    .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))[0];
+  if (!target) return;
+  const now = new Date().toISOString();
+  await db.uut_entries.update(target.id, {
+    uut_serial: '', cable_serial: '', backplane: '',
+    notes: '', failure_notes: '', result: '',
+    sync_status: 'pending', updated_at: now,
+  });
+  await db.sessions.update(sid, { sync_status: 'pending', updated_at: now });
+}
+
 export async function dbDistinct(col) {
   const all = await db.sessions.toArray();
   return [...new Set(all.map(s => s[col]).filter(Boolean))].sort();
