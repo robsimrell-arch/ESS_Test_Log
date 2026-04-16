@@ -1099,7 +1099,19 @@ function applyATFilters() {
 let _atDeleteTarget = null; // { rowData, trEl }
 
 function openATDeleteModal(rowData, trEl) {
-  _atDeleteTarget = { rowData, trEl };
+  // Snapshot ALL filter state right now, before the modal can corrupt it
+  const filterSnapshot = {
+    search:  $('#at-search').value,
+    result:  $('#at-result').value,
+    chamber: $('#at-chamber').value,
+    station: $('#at-station').value,
+    type:    $('#at-type').value,
+    part:    $('#at-part').value,
+    channel: $('#at-channel').value,
+    cable:   $('#at-cable').value,
+  };
+
+  _atDeleteTarget = { rowData, trEl, filterSnapshot };
   const overlay = $('#modal-overlay');
   $$('.modal').forEach(m => m.style.display = 'none');
   $('#modal-at-delete').style.display = '';
@@ -1141,7 +1153,7 @@ async function confirmATDelete() {
     return;
   }
   if (!_atDeleteTarget) return;
-  const { rowData, trEl } = _atDeleteTarget;
+  const { rowData, trEl, filterSnapshot } = _atDeleteTarget;
   _atDeleteTarget = null;
 
   await dbDeleteUutEntry(rowData.sid, rowData.channel);
@@ -1151,8 +1163,17 @@ async function confirmATDelete() {
     r => !(r.sid === rowData.sid && r.channel === rowData.channel)
   );
 
-  // Surgically remove just this row from the DOM — do NOT re-run applyATFilters()
-  // so the user's current filter/sort state is completely preserved.
+  // Restore filter state — browser autofill may have mutated inputs while modal was open
+  $('#at-search').value  = filterSnapshot.search;
+  $('#at-result').value  = filterSnapshot.result;
+  $('#at-chamber').value = filterSnapshot.chamber;
+  $('#at-station').value = filterSnapshot.station;
+  $('#at-type').value    = filterSnapshot.type;
+  $('#at-part').value    = filterSnapshot.part;
+  $('#at-channel').value = filterSnapshot.channel;
+  $('#at-cable').value   = filterSnapshot.cable;
+
+  // Surgically remove just this row from the DOM — filter state is now guaranteed clean
   if (trEl && trEl.parentNode) trEl.remove();
 
   // Update the record count label

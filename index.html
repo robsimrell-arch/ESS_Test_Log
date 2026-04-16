@@ -92,7 +92,7 @@
       <!-- Filter rows -->
       <div class="filter-bar">
         <span class="filter-icon">🔍</span>
-        <input type="text" id="at-search" placeholder="Search…" class="filter-input" />
+        <input type="text" id="at-search" placeholder="Search…" class="filter-input" autocomplete="off" />
         <label class="filter-label">Result:</label>
         <select id="at-result" class="filter-select"><option>All</option><option>PASS</option><option>FAIL</option><option>ABORTED</option><option>—</option></select>
         <label class="filter-label">Chamber:</label>
@@ -329,7 +329,7 @@
           word-break: break-all;
         "></div>
         <label>Engineer Password</label>
-        <input type="password" id="at-delete-pw" class="modal-input" placeholder="Enter password…" autocomplete="off" />
+        <input type="password" id="at-delete-pw" class="modal-input" placeholder="Enter password…" autocomplete="new-password" />
         <div id="at-delete-error" style="display:none;color:var(--red);font-size:.85rem;margin-top:8px;">
           ❌ Incorrect password. Please try again.
         </div>
