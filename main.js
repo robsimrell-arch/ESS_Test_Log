@@ -1065,6 +1065,10 @@ function applyATFilters() {
       let v = r[c.key] ?? '';
       if (c.key === 'start_time' || c.key === 'end_time') v = fmtTs(v);
       if (c.key === 'closed_by' && !v) v = '—';
+      if (c.key === 'failure_notes' || c.key === 'notes') {
+        const full = String(v).replace(/"/g, '&quot;');
+        return `<td class="td-truncate" title="${full}">${v}</td>`;
+      }
       return `<td>${v}</td>`;
     }).join('');
 

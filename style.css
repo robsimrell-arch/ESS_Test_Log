@@ -286,6 +286,15 @@ button:disabled {
 .data-table tr.row-fail:hover td  { background: rgba(239, 68, 68, 0.25); }
 .data-table tr.row-abort:hover td { background: rgba(251, 191, 36, 0.22); }
 
+/* Truncate long text cells (Failure Notes, Operator Notes) */
+.data-table td.td-truncate {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+}
+
 /* ── Filter Bars ──────────────────────────────────────────────────────── */
 .filter-bar {
   display: flex;
