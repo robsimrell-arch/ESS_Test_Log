@@ -1146,11 +1146,20 @@ async function confirmATDelete() {
 
   await dbDeleteUutEntry(rowData.sid, rowData.channel);
 
-  // Remove from local cache and re-render
+  // Remove from local in-memory cache
   allTestsData = allTestsData.filter(
     r => !(r.sid === rowData.sid && r.channel === rowData.channel)
   );
-  applyATFilters();
+
+  // Surgically remove just this row from the DOM — do NOT re-run applyATFilters()
+  // so the user's current filter/sort state is completely preserved.
+  if (trEl && trEl.parentNode) trEl.remove();
+
+  // Update the record count label
+  const shown = $('#all-tests-tbody').querySelectorAll('tr').length;
+  const total = allTestsData.length;
+  const suffix = shown < total ? '  —  filters active' : '';
+  $('#at-count').textContent = `${shown} of ${total} record(s)${suffix}`;
 
   // Trigger sync if enabled
   if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
