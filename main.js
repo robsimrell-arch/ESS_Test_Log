@@ -1024,6 +1024,24 @@ function getATActiveRows() {
     rows = rows.filter(r => String(r[f.key] ?? '') === String(want));
   }
 
+  // Date range filter — compare against end_time (falls back to start_time)
+  const fromVal = $('#at-date-from').value; // 'YYYY-MM-DD' or ''
+  const toVal   = $('#at-date-to').value;
+  if (fromVal) {
+    const fromMs = new Date(fromVal + 'T00:00:00').getTime();
+    rows = rows.filter(r => {
+      const t = r.end_time || r.start_time;
+      return t && new Date(t).getTime() >= fromMs;
+    });
+  }
+  if (toVal) {
+    const toMs = new Date(toVal + 'T23:59:59').getTime();
+    rows = rows.filter(r => {
+      const t = r.end_time || r.start_time;
+      return t && new Date(t).getTime() <= toMs;
+    });
+  }
+
   const search = $('#at-search').value.trim().toLowerCase();
   if (search) {
     rows = rows.filter(r => {
@@ -1145,6 +1163,8 @@ function openATDeleteModal(rowData, trEl) {
     part:    $('#at-part').value,
     channel: $('#at-channel').value,
     cable:   $('#at-cable').value,
+    dateFrom: $('#at-date-from').value,
+    dateTo:   $('#at-date-to').value,
   };
 
   _atDeleteTarget = { rowData, trEl, filterSnapshot };
@@ -1200,14 +1220,16 @@ async function confirmATDelete() {
   );
 
   // Restore filter state — browser autofill may have mutated inputs while modal was open
-  $('#at-search').value  = filterSnapshot.search;
-  $('#at-result').value  = filterSnapshot.result;
-  $('#at-chamber').value = filterSnapshot.chamber;
-  $('#at-station').value = filterSnapshot.station;
-  $('#at-type').value    = filterSnapshot.type;
-  $('#at-part').value    = filterSnapshot.part;
-  $('#at-channel').value = filterSnapshot.channel;
-  $('#at-cable').value   = filterSnapshot.cable;
+  $('#at-search').value     = filterSnapshot.search;
+  $('#at-result').value     = filterSnapshot.result;
+  $('#at-chamber').value    = filterSnapshot.chamber;
+  $('#at-station').value    = filterSnapshot.station;
+  $('#at-type').value       = filterSnapshot.type;
+  $('#at-part').value       = filterSnapshot.part;
+  $('#at-channel').value    = filterSnapshot.channel;
+  $('#at-cable').value      = filterSnapshot.cable;
+  $('#at-date-from').value  = filterSnapshot.dateFrom;
+  $('#at-date-to').value    = filterSnapshot.dateTo;
 
   // Surgically remove just this row from the DOM — filter state is now guaranteed clean
   if (trEl && trEl.parentNode) trEl.remove();
@@ -1254,6 +1276,8 @@ function clearATFilters() {
   $('#at-part').value = 'All';
   $('#at-channel').value = 'All';
   $('#at-cable').value = 'All';
+  $('#at-date-from').value = '';
+  $('#at-date-to').value = '';
   applyATFilters();
 }
 
@@ -1696,7 +1720,7 @@ function bindEvents() {
   $('#at-clear-filters').addEventListener('click', clearATFilters);
 
   // Live filter listeners for All Tests
-  ['at-search', 'at-result', 'at-chamber', 'at-station', 'at-type', 'at-part', 'at-channel', 'at-cable'].forEach(id => {
+  ['at-search', 'at-result', 'at-chamber', 'at-station', 'at-type', 'at-part', 'at-channel', 'at-cable', 'at-date-from', 'at-date-to'].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener('input', applyATFilters);
     el.addEventListener('change', applyATFilters);

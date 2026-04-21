@@ -320,6 +320,12 @@ button:disabled {
 }
 .filter-input:focus { border-color: var(--accent); outline: none; }
 
+.filter-date {
+  width: 136px;
+  padding: 5px 8px;
+  color-scheme: dark;
+}
+
 .filter-select {
   background: var(--bg);
   color: var(--text);
