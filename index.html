@@ -30,6 +30,7 @@
         <button class="btn-ghost" id="btn-settings">⚙ Settings</button>
         <button class="btn-ghost" id="btn-history">📋 Session History</button>
         <button class="btn-ghost" id="btn-all-tests">📊 UUT History</button>
+        <button class="btn-ghost" id="btn-equip-health">📈 Equipment Health</button>
         <button class="btn-primary" id="btn-new-session">＋ New Test Session</button>
       </nav>
     </header>
@@ -123,6 +124,65 @@
           </thead>
           <tbody id="all-tests-tbody"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- ── View: Equipment Health ──────────────────────────────── -->
+    <div id="view-equip-health" class="view">
+      <div class="view-header">
+        <h2>📈 Equipment Health Statistics</h2>
+        <div class="view-header-actions">
+          <button class="btn-ghost" id="equip-health-refresh">↻ Refresh</button>
+        </div>
+      </div>
+
+      <!-- Filter controls -->
+      <div class="equip-controls">
+        <span class="filter-label">From:</span>
+        <input type="date" id="eh-date-from" class="filter-input filter-date" autocomplete="off" />
+        <span class="filter-label">To:</span>
+        <input type="date" id="eh-date-to" class="filter-input filter-date" autocomplete="off" />
+        <span class="filter-label">Part #:</span>
+        <select id="eh-part" class="filter-select"><option>All</option></select>
+        <span class="filter-label">Sort by:</span>
+        <select id="eh-sort" class="filter-select">
+          <option value="failRate">Fail Rate %</option>
+          <option value="consecutive">Consecutive Failures</option>
+          <option value="totalTests">Total Tests</option>
+          <option value="lastFail">Last Fail Date</option>
+        </select>
+        <button class="btn-ghost" id="eh-clear-filters" style="margin-left:4px;">✕ Clear</button>
+      </div>
+
+      <!-- Summary banner (populated by JS) -->
+      <div class="equip-summary-bar" id="equip-summary-bar"></div>
+
+      <!-- Tab bar -->
+      <div class="equip-tab-bar">
+        <button class="equip-tab active" id="eh-tab-cables" data-section="eh-section-cables">
+          🔌 Cables <span class="equip-tab-count" id="eh-count-cables">0</span>
+        </button>
+        <button class="equip-tab" id="eh-tab-backplanes" data-section="eh-section-backplanes">
+          🖥️ Backplanes <span class="equip-tab-count" id="eh-count-backplanes">0</span>
+        </button>
+        <button class="equip-tab" id="eh-tab-stations" data-section="eh-section-stations">
+          ⚡ Station / Channels <span class="equip-tab-count" id="eh-count-stations">0</span>
+        </button>
+      </div>
+
+      <!-- Section: Cables -->
+      <div class="equip-section active" id="eh-section-cables">
+        <div class="equip-card-grid" id="eh-grid-cables"></div>
+      </div>
+
+      <!-- Section: Backplanes -->
+      <div class="equip-section" id="eh-section-backplanes">
+        <div class="equip-card-grid" id="eh-grid-backplanes"></div>
+      </div>
+
+      <!-- Section: Station / Channels -->
+      <div class="equip-section" id="eh-section-stations">
+        <div class="equip-card-grid" id="eh-grid-stations"></div>
       </div>
     </div>
 

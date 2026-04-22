@@ -1685,6 +1685,271 @@ async function confirmImport() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Equipment Health Statistics
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Compute per-equipment-item statistics from a flat array of test records.
+ * Only PASS and FAIL results are counted; ABORTED records are excluded.
+ *
+ * @param {object[]} records  - Rows from dbAllTests() (already date-filtered)
+ * @param {function} keyFn   - Function(record) => string key for grouping
+ * @param {string}   label   - Human-readable label prefix for each item
+ * @returns {object[]} Sorted array of stat objects (sorted by failRate desc)
+ */
+function computeEquipStats(records, keyFn) {
+  const groups = new Map();
+
+  for (const r of records) {
+    if (r.result !== 'PASS' && r.result !== 'FAIL') continue; // skip ABORTED
+    const key = keyFn(r);
+    if (!key) continue; // skip empty values
+
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(r);
+  }
+
+  const stats = [];
+  for (const [key, recs] of groups) {
+    // Sort chronologically (oldest first) for streak calculation
+    const sorted = [...recs].sort((a, b) => {
+      const ta = a.end_time || a.start_time || '';
+      const tb = b.end_time || b.start_time || '';
+      return ta.localeCompare(tb);
+    });
+
+    const total    = sorted.length;
+    const failures = sorted.filter(r => r.result === 'FAIL').length;
+    const failRate = total > 0 ? (failures / total) * 100 : 0;
+
+    // Most-recent records first for date lookups
+    const descSorted = [...sorted].reverse();
+    const lastPassRec = descSorted.find(r => r.result === 'PASS');
+    const lastFailRec = descSorted.find(r => r.result === 'FAIL');
+    const lastPass = lastPassRec ? (lastPassRec.end_time || lastPassRec.start_time) : null;
+    const lastFail = lastFailRec ? (lastFailRec.end_time || lastFailRec.start_time) : null;
+
+    // Consecutive failures: count from the most recent record backwards
+    let consecutive = 0;
+    for (const r of descSorted) {
+      if (r.result === 'FAIL') consecutive++;
+      else break;
+    }
+
+    // Risk tier (needs >= 3 tests for a meaningful tier)
+    let tier;
+    if (total < 3) {
+      tier = 'unknown';
+    } else if (failRate >= 70) {
+      tier = 'critical';
+    } else if (failRate >= 30) {
+      tier = 'warning';
+    } else {
+      tier = 'healthy';
+    }
+
+    stats.push({ key, total, failures, failRate, lastPass, lastFail, consecutive, tier });
+  }
+
+  return stats;
+}
+
+/**
+ * Determine the sort comparator function based on the chosen sort key.
+ */
+function equipSortFn(sortKey) {
+  switch (sortKey) {
+    case 'consecutive':
+      return (a, b) => b.consecutive - a.consecutive || b.failRate - a.failRate;
+    case 'totalTests':
+      return (a, b) => b.total - a.total || b.failRate - a.failRate;
+    case 'lastFail':
+      return (a, b) => (b.lastFail || '').localeCompare(a.lastFail || '') || b.failRate - a.failRate;
+    default: // failRate
+      return (a, b) => b.failRate - a.failRate || b.consecutive - a.consecutive;
+  }
+}
+
+/**
+ * Build a single equipment health card DOM element.
+ */
+function buildEquipCard(stat, categoryLabel) {
+  const { key, total, failures, failRate, lastPass, lastFail, consecutive, tier } = stat;
+
+  const tierLabel = {
+    critical: '🔴 Critical',
+    warning:  '🟡 Warning',
+    healthy:  '🟢 Healthy',
+    unknown:  '❓ Low Data',
+  }[tier];
+  const badgeClass = `badge-${tier}`;
+  const pctClass   = tier === 'unknown' ? '' : tier;
+  const pctStr     = tier === 'unknown' ? 'N/A' : `${failRate.toFixed(1)}%`;
+
+  // Consecutive badge styling
+  const streakClass = consecutive >= 5 ? 'streak-high'
+                    : consecutive >= 2 ? 'streak-mid'
+                    : 'streak-low';
+  const streakIcon  = consecutive >= 5 ? '🔴' : consecutive >= 2 ? '⚠️' : 'ℹ️';
+
+  const card = document.createElement('div');
+  card.className = `equip-card risk-${tier}`;
+  card.innerHTML = `
+    <div class="equip-card-header">
+      <div>
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:2px;">${categoryLabel}</div>
+        <div class="equip-card-id">${key}</div>
+      </div>
+      <span class="equip-risk-badge ${badgeClass}">${tierLabel}</span>
+    </div>
+
+    <div class="equip-failbar-wrap">
+      <div class="equip-failbar-label">
+        <span>Fail Rate</span>
+        <span class="fail-pct ${pctClass}">${pctStr}</span>
+      </div>
+      <div class="equip-failbar-track">
+        <div class="equip-failbar-fill ${pctClass || 'unknown'}"
+             style="width:${tier === 'unknown' ? 0 : Math.min(failRate, 100)}%"></div>
+      </div>
+    </div>
+
+    <div class="equip-pills">
+      <span class="equip-pill">∑ Tests: <span class="pill-val">${total}</span></span>
+      <span class="equip-pill pill-fail">✗ Fails: <span class="pill-val">${failures}</span></span>
+      <span class="equip-pill pill-pass">✓ Passes: <span class="pill-val">${total - failures}</span></span>
+    </div>
+
+    ${consecutive > 0 ? `
+    <div class="equip-consecutive ${streakClass}">
+      ${streakIcon} ${consecutive} Consecutive Failure${consecutive !== 1 ? 's' : ''} (most recent)
+    </div>` : ''}
+
+    <div class="equip-dates">
+      <div>
+        <div class="equip-date-lbl">🟢 Last Pass</div>
+        <div class="equip-date-val ${lastPass ? '' : 'never'}">${lastPass ? fmtTs(lastPass) : 'Never'}</div>
+      </div>
+      <div>
+        <div class="equip-date-lbl">🔴 Last Fail</div>
+        <div class="equip-date-val ${lastFail ? '' : 'never'}">${lastFail ? fmtTs(lastFail) : 'Never'}</div>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+/**
+ * Render a list of stats into a target grid element.
+ */
+function renderEquipGrid(gridEl, stats, categoryLabel) {
+  gridEl.innerHTML = '';
+  if (!stats.length) {
+    gridEl.innerHTML = '<div class="equip-empty">No data available for the selected filters.</div>';
+    return;
+  }
+  for (const stat of stats) {
+    gridEl.appendChild(buildEquipCard(stat, categoryLabel));
+  }
+}
+
+let equipHealthData = [];
+
+async function loadEquipHealth() {
+  showView('view-equip-health');
+  if (isSyncEnabled()) await syncAll();
+  equipHealthData = await dbAllTests();
+
+  // Populate part number filter from data
+  const parts = [...new Set(equipHealthData.map(r => r.part_number).filter(Boolean))].sort();
+  const ehPart = $('#eh-part');
+  ehPart.innerHTML = '<option>All</option>' + parts.map(p => `<option>${p}</option>`).join('');
+
+  applyEquipFilters();
+}
+
+function getEquipFilteredRecords() {
+  let rows = [...equipHealthData];
+
+  // Date range filter
+  const fromVal = $('#eh-date-from').value;
+  const toVal   = $('#eh-date-to').value;
+  if (fromVal) {
+    const fromMs = new Date(fromVal + 'T00:00:00').getTime();
+    rows = rows.filter(r => {
+      const t = r.end_time || r.start_time;
+      return t && new Date(t).getTime() >= fromMs;
+    });
+  }
+  if (toVal) {
+    const toMs = new Date(toVal + 'T23:59:59').getTime();
+    rows = rows.filter(r => {
+      const t = r.end_time || r.start_time;
+      return t && new Date(t).getTime() <= toMs;
+    });
+  }
+
+  // Part number filter
+  const part = $('#eh-part').value;
+  if (part && part !== 'All') {
+    rows = rows.filter(r => r.part_number === part);
+  }
+
+  return rows;
+}
+
+function applyEquipFilters() {
+  const rows    = getEquipFilteredRecords();
+  const sortKey = $('#eh-sort').value;
+  const sortFn  = equipSortFn(sortKey);
+
+  // Compute stats for each category
+  const cableStats  = computeEquipStats(rows, r => r.cable_serial || '').sort(sortFn);
+  const bpStats     = computeEquipStats(rows, r => r.backplane    || '').sort(sortFn);
+  const stChanStats = computeEquipStats(rows, r => r.station && r.channel != null ? `${r.station} / Ch ${r.channel}` : '').sort(sortFn);
+
+  // Update tab counts
+  $('#eh-count-cables').textContent     = cableStats.length;
+  $('#eh-count-backplanes').textContent = bpStats.length;
+  $('#eh-count-stations').textContent   = stChanStats.length;
+
+  // Render grids
+  renderEquipGrid($('#eh-grid-cables'),     cableStats,  'Cable Serial');
+  renderEquipGrid($('#eh-grid-backplanes'), bpStats,     'Backplane');
+  renderEquipGrid($('#eh-grid-stations'),   stChanStats, 'Station / Channel');
+
+  // Update summary banner (aggregate across all equipment types together)
+  const allStats = [...cableStats, ...bpStats, ...stChanStats];
+  const nCritical = allStats.filter(s => s.tier === 'critical').length;
+  const nWarning  = allStats.filter(s => s.tier === 'warning').length;
+  const nHealthy  = allStats.filter(s => s.tier === 'healthy').length;
+  const nUnknown  = allStats.filter(s => s.tier === 'unknown').length;
+  const totalRecs = rows.filter(r => r.result === 'PASS' || r.result === 'FAIL').length;
+  $('#equip-summary-bar').innerHTML = `
+    <span style="color:var(--muted);">${totalRecs} test records analyzed</span>
+    <span class="equip-summary-item"><span class="equip-summary-dot critical"></span>${nCritical} Critical (≥70% fail)</span>
+    <span class="equip-summary-item"><span class="equip-summary-dot warning"></span>${nWarning} Warning (30–69%)</span>
+    <span class="equip-summary-item"><span class="equip-summary-dot healthy"></span>${nHealthy} Healthy (&lt;30%)</span>
+    ${nUnknown ? `<span style="color:var(--muted);">${nUnknown} insufficient data (&lt;3 tests)</span>` : ''}
+  `;
+}
+
+function bindEquipHealthTabs() {
+  $$('.equip-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      $$('.equip-tab').forEach(t => t.classList.remove('active'));
+      $$('.equip-section').forEach(s => s.classList.remove('active'));
+      tab.classList.add('active');
+      const sectionId = tab.dataset.section;
+      const section = document.getElementById(sectionId);
+      if (section) section.classList.add('active');
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Wire Up Events
    ═══════════════════════════════════════════════════════════════════════════ */
 function bindEvents() {
@@ -1695,7 +1960,23 @@ function bindEvents() {
   $('#btn-new-session').addEventListener('click', openNewSessionModal);
   $('#btn-history').addEventListener('click', loadHistory);
   $('#btn-all-tests').addEventListener('click', loadAllTests);
+  $('#btn-equip-health').addEventListener('click', loadEquipHealth);
   $('#btn-settings').addEventListener('click', loadSettingsView);
+
+  // Equipment Health filters
+  bindEquipHealthTabs();
+  $('#equip-health-refresh').addEventListener('click', loadEquipHealth);
+  ['eh-date-from', 'eh-date-to', 'eh-part', 'eh-sort'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('change', applyEquipFilters);
+  });
+  $('#eh-clear-filters').addEventListener('click', () => {
+    $('#eh-date-from').value = '';
+    $('#eh-date-to').value   = '';
+    $('#eh-part').value      = 'All';
+    $('#eh-sort').value      = 'failRate';
+    applyEquipFilters();
+  });
 
   // New Session modal
   $('#ns-cancel').addEventListener('click', closeModal);

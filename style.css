@@ -826,3 +826,256 @@ select.modal-input { cursor: pointer; }
   display: inline-block;
   vertical-align: middle;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Equipment Health Statistics View
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tab bar ──────────────────────────────────────────────────────────── */
+.equip-tab-bar {
+  display: flex;
+  gap: 0;
+  background: var(--header);
+  border-bottom: 2px solid var(--border);
+  padding: 0 20px;
+}
+.equip-tab {
+  background: none;
+  color: var(--muted);
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 12px 22px;
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+  margin-bottom: -2px;
+  white-space: nowrap;
+}
+.equip-tab:hover { color: var(--text); }
+.equip-tab.active {
+  color: var(--accent-h);
+  border-bottom-color: var(--accent-h);
+}
+.equip-tab-count {
+  display: inline-block;
+  background: var(--border);
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.equip-tab.active .equip-tab-count {
+  background: rgba(56,139,253,.22);
+  color: var(--accent-h);
+}
+
+/* ── Card Grid ────────────────────────────────────────────────────────── */
+.equip-section { display: none; padding: 20px; }
+.equip-section.active { display: block; }
+
+.equip-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.equip-empty {
+  color: var(--muted);
+  font-size: .9rem;
+  padding: 40px 0;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ── Individual Equipment Card ─────────────────────────────────────────── */
+.equip-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  transition: transform var(--transition), box-shadow var(--transition);
+  animation: cardIn .25s ease;
+  position: relative;
+  overflow: hidden;
+}
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.equip-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 28px rgba(0,0,0,.4);
+}
+
+/* Risk tier border accent */
+.equip-card.risk-critical { border-left: 4px solid var(--red); }
+.equip-card.risk-warning  { border-left: 4px solid var(--amber); }
+.equip-card.risk-healthy  { border-left: 4px solid var(--green); }
+.equip-card.risk-unknown  { border-left: 4px solid var(--muted); }
+
+/* ── Card Header ──────────────────────────────────────────────────────── */
+.equip-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.equip-card-id {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-all;
+}
+.equip-risk-badge {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 3px 9px;
+  border-radius: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge-critical { background: rgba(248,81,73,.18); color: var(--red); border: 1px solid var(--red); }
+.badge-warning  { background: rgba(210,153,34,.18); color: var(--amber); border: 1px solid var(--amber); }
+.badge-healthy  { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid var(--green); }
+.badge-unknown  { background: rgba(139,148,158,.12); color: var(--muted); border: 1px solid var(--muted); }
+
+/* ── Fail Rate Progress Bar ────────────────────────────────────────────── */
+.equip-failbar-wrap { margin-bottom: 12px; }
+.equip-failbar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: .75rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.equip-failbar-label .fail-pct {
+  font-weight: 700;
+  font-size: .85rem;
+}
+.equip-failbar-label .fail-pct.critical { color: var(--red); }
+.equip-failbar-label .fail-pct.warning  { color: var(--amber); }
+.equip-failbar-label .fail-pct.healthy  { color: var(--green); }
+
+.equip-failbar-track {
+  height: 6px;
+  background: var(--header);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.equip-failbar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width .5s ease;
+  min-width: 2px;
+}
+.equip-failbar-fill.critical { background: linear-gradient(90deg, var(--red), #ff9d9a); }
+.equip-failbar-fill.warning  { background: linear-gradient(90deg, var(--amber), var(--amber-h)); }
+.equip-failbar-fill.healthy  { background: linear-gradient(90deg, var(--green), var(--green-h)); }
+.equip-failbar-fill.unknown  { background: var(--muted); }
+
+/* ── Stat Pills Row ───────────────────────────────────────────────────── */
+.equip-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.equip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--header);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px 9px;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.equip-pill .pill-val { color: var(--text); font-weight: 700; }
+.equip-pill.pill-fail .pill-val { color: var(--red); }
+.equip-pill.pill-pass .pill-val { color: var(--green); }
+
+/* ── Consecutive Failure Badge ─────────────────────────────────────────── */
+.equip-consecutive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .78rem;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  width: 100%;
+}
+.equip-consecutive.streak-high {
+  background: rgba(248,81,73,.15);
+  color: var(--red);
+  border: 1px solid rgba(248,81,73,.35);
+}
+.equip-consecutive.streak-mid {
+  background: rgba(210,153,34,.12);
+  color: var(--amber);
+  border: 1px solid rgba(210,153,34,.3);
+}
+.equip-consecutive.streak-low {
+  background: var(--header);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* ── Date lines ───────────────────────────────────────────────────────── */
+.equip-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: .73rem;
+}
+.equip-date-lbl { color: var(--muted); }
+.equip-date-val { color: var(--text); font-weight: 600; margin-top: 1px; }
+.equip-date-val.never { color: var(--muted); font-style: italic; font-weight: 400; }
+
+/* ── Controls bar ─────────────────────────────────────────────────────── */
+.equip-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--header);
+  padding: 10px 20px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Summary banner ───────────────────────────────────────────────────── */
+.equip-summary-bar {
+  display: flex;
+  gap: 16px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: .8rem;
+  flex-wrap: wrap;
+}
+.equip-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.equip-summary-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.equip-summary-dot.critical { background: var(--red); }
+.equip-summary-dot.warning  { background: var(--amber); }
+.equip-summary-dot.healthy  { background: var(--green); }
+
