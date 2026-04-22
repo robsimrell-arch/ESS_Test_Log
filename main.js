@@ -955,6 +955,11 @@ let allTestsData = [];
 let atSortKey = 'end_time';
 let atSortRev = true;
 
+// Records before this timestamp are excluded from all views by default.
+// Users can still override by clearing the From date filter manually.
+const DATA_CUTOFF_MS   = new Date('2026-04-11T08:53:15').getTime();
+const DATA_CUTOFF_DATE = '2026-04-11'; // YYYY-MM-DD for date inputs
+
 function buildATHead() {
   const headRow = $('#at-head-row');
   headRow.innerHTML = '';
@@ -1001,12 +1006,21 @@ async function loadAllTests() {
   populateSelect($('#at-channel'), chans.map(String));
   populateSelect($('#at-cable'),   distinct('cable_serial'));
 
+  // Pre-set the From date to the data quality cutoff (only on fresh load)
+  if (!$('#at-date-from').value) $('#at-date-from').value = DATA_CUTOFF_DATE;
+
   buildATHead();
   applyATFilters();
 }
 
 function getATActiveRows() {
   let rows = [...allTestsData];
+
+  // Always exclude records before the data-quality cutoff date
+  rows = rows.filter(r => {
+    const t = r.end_time || r.start_time;
+    return t && new Date(t).getTime() >= DATA_CUTOFF_MS;
+  });
 
   const filters = [
     { val: $('#at-result').value,  key: 'result' },
@@ -1298,7 +1312,7 @@ function clearATFilters() {
   $('#at-part').value = 'All';
   $('#at-channel').value = 'All';
   $('#at-cable').value = 'All';
-  $('#at-date-from').value = '';
+  $('#at-date-from').value = DATA_CUTOFF_DATE; // restore cutoff default
   $('#at-date-to').value = '';
   applyATFilters();
 }
@@ -1954,7 +1968,7 @@ function buildEquipCard(stat, categoryLabel) {
   card.addEventListener('dblclick', async () => {
     await loadAllTests(); // Switches view, loads data, and populates dropdowns
 
-    // Reset all filters manually
+    // Reset all filters manually (preserve cutoff as the From default)
     $('#at-search').value = '';
     $('#at-result').value = 'All';
     $('#at-chamber').value = 'All';
@@ -1963,7 +1977,7 @@ function buildEquipCard(stat, categoryLabel) {
     $('#at-part').value = 'All';
     $('#at-channel').value = 'All';
     $('#at-cable').value = 'All';
-    $('#at-date-from').value = '';
+    $('#at-date-from').value = DATA_CUTOFF_DATE;
     $('#at-date-to').value = '';
 
     // Apply the specific filter for this equipment
@@ -2011,11 +2025,20 @@ async function loadEquipHealth() {
   const ehPart = $('#eh-part');
   ehPart.innerHTML = '<option>All</option>' + parts.map(p => `<option>${p}</option>`).join('');
 
+  // Pre-set the From date to the data quality cutoff (only on fresh load)
+  if (!$('#eh-date-from').value) $('#eh-date-from').value = DATA_CUTOFF_DATE;
+
   applyEquipFilters();
 }
 
 function getEquipFilteredRecords() {
   let rows = [...equipHealthData];
+
+  // Always exclude records before the data-quality cutoff date
+  rows = rows.filter(r => {
+    const t = r.end_time || r.start_time;
+    return t && new Date(t).getTime() >= DATA_CUTOFF_MS;
+  });
 
   // Date range filter
   const fromVal = $('#eh-date-from').value;
@@ -2115,7 +2138,7 @@ function bindEvents() {
     el.addEventListener('change', applyEquipFilters);
   });
   $('#eh-clear-filters').addEventListener('click', () => {
-    $('#eh-date-from').value = '';
+    $('#eh-date-from').value = DATA_CUTOFF_DATE; // restore cutoff default
     $('#eh-date-to').value   = '';
     $('#eh-part').value      = 'All';
     $('#eh-sort').value      = 'failRate';
