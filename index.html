@@ -115,6 +115,7 @@
         <label class="filter-label">To:</label>
         <input type="date" id="at-date-to" class="filter-input filter-date" autocomplete="off" />
         <button class="btn-ghost" id="at-clear-filters">✕ Clear all filters</button>
+        <button class="btn-ghost" id="at-bulk-delete-blank" style="color:var(--red);border-color:var(--red);margin-left:4px;" title="Delete all records with no Result set">🗑️ Clear Blank Results</button>
       </div>
       <div class="record-count" id="at-count"></div>
       <div class="table-wrap table-wrap-scroll">
@@ -404,7 +405,37 @@
       </div>
     </div>
 
+    <!-- Bulk Delete Blank Results (Password-Protected) modal -->
+    <div class="modal" id="modal-bulk-delete-blank" style="display:none">
+      <div class="modal-header modal-header-red">
+        <h2>🗑️ Clear Blank Results</h2>
+        <p class="modal-sub">Permanently removes all UUT records with no Result set. Requires authorization.</p>
+      </div>
+      <div class="modal-body">
+        <div id="bulk-delete-info" style="
+          padding: 12px 16px;
+          background: rgba(255,60,60,.08);
+          border: 1px solid var(--red);
+          border-radius: 6px;
+          font-size: .88rem;
+          color: var(--text);
+          margin-bottom: 18px;
+          line-height: 1.7;
+        "></div>
+        <label>Engineer Password</label>
+        <input type="password" id="bulk-delete-pw" class="modal-input" placeholder="Enter password…" autocomplete="new-password" />
+        <div id="bulk-delete-error" style="display:none;color:var(--red);font-size:.85rem;margin-top:8px;">
+          ❌ Incorrect password. Please try again.
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="bulk-delete-cancel">Cancel</button>
+        <button class="btn-danger" id="bulk-delete-confirm">🗑️ Delete All Listed Records</button>
+      </div>
+    </div>
+
     <!-- Report Preview Modal -->
+
     <div class="modal modal-wide" id="modal-report-preview" style="display:none">
       <div class="modal-header hide-on-print">
         <h2 id="report-title">🖨️ Report Preview</h2>
