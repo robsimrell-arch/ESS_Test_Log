@@ -1107,10 +1107,7 @@ function applyATFilters() {
 
     tbody.appendChild(tr);
   }
-  const total = allTestsData.length;
-  const shown = rows.length;
-  const suffix = shown < total ? '  —  filters active' : '';
-  $('#at-count').textContent = `${shown} of ${total} record(s)${suffix}`;
+  renderATCount(rows, allTestsData.length);
 
   // Refresh dropdowns to only show values present in the visible rows
   updateATFilterDropdowns(rows);
@@ -1235,10 +1232,7 @@ async function confirmATDelete() {
   if (trEl && trEl.parentNode) trEl.remove();
 
   // Update the record count label
-  const shown = $('#all-tests-tbody').querySelectorAll('tr').length;
-  const total = allTestsData.length;
-  const suffix = shown < total ? '  —  filters active' : '';
-  $('#at-count').textContent = `${shown} of ${total} record(s)${suffix}`;
+  renderATCount(allTestsData.filter(r => r !== rowData), allTestsData.length - 1);
 
   // Trigger sync if enabled
   if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
@@ -1265,6 +1259,34 @@ function exportAllTests() {
   const ts = `${pad(now.getMonth()+1)}${pad(now.getDate())}${now.getFullYear()}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   downloadCSV(`AllTests_${ts}.csv`, csv);
   toast('CSV exported.');
+}
+
+/**
+ * Render the pass/fail summary bar above the All Tests table.
+ * @param {Array} rows  - the currently visible (filtered) rows
+ * @param {number} total - total records in the full dataset
+ */
+function renderATCount(rows, total) {
+  const shown   = rows.length;
+  const passes  = rows.filter(r => r.result === 'PASS').length;
+  const fails   = rows.filter(r => r.result === 'FAIL').length;
+  const aborted = rows.filter(r => r.result === 'ABORTED').length;
+  const other   = shown - passes - fails - aborted;
+
+  // Percentages based on rows that have a definitive result
+  const judged  = passes + fails;
+  const passPct = judged > 0 ? ((passes / judged) * 100).toFixed(1) : null;
+  const failPct = judged > 0 ? ((fails  / judged) * 100).toFixed(1) : null;
+
+  const filtersActive = shown < total;
+
+  $('#at-count').innerHTML = [
+    `<span class="rc-total">${shown}${filtersActive ? ` of ${total}` : ''} record${shown !== 1 ? 's' : ''}${filtersActive ? ' &nbsp;<span class="rc-filter-tag">filtered</span>' : ''}</span>`,
+    passes  > 0 ? `<span class="rc-pill rc-pass">✓ PASS&nbsp; ${passes}${passPct != null ? ` <span class="rc-pct">${passPct}%</span>` : ''}</span>` : '',
+    fails   > 0 ? `<span class="rc-pill rc-fail">✗ FAIL&nbsp; ${fails}${failPct != null ? ` <span class="rc-pct">${failPct}%</span>` : ''}</span>` : '',
+    aborted > 0 ? `<span class="rc-pill rc-abort">⊘ ABORTED&nbsp; ${aborted}</span>` : '',
+    other   > 0 ? `<span class="rc-pill rc-blank">— Blank&nbsp; ${other}</span>` : '',
+  ].join('');
 }
 
 function clearATFilters() {
