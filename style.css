@@ -903,6 +903,8 @@ select.modal-input { cursor: pointer; }
   animation: cardIn .25s ease;
   position: relative;
   overflow: hidden;
+  cursor: pointer;
+  user-select: none;
 }
 @keyframes cardIn {
   from { opacity: 0; transform: translateY(10px); }

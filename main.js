@@ -1927,6 +1927,39 @@ function buildEquipCard(stat, categoryLabel) {
       </div>
     </div>
   `;
+
+  // Jump to UUT History on double-click
+  card.addEventListener('dblclick', async () => {
+    await loadAllTests(); // Switches view, loads data, and populates dropdowns
+
+    // Reset all filters manually
+    $('#at-search').value = '';
+    $('#at-result').value = 'All';
+    $('#at-chamber').value = 'All';
+    $('#at-station').value = 'All';
+    $('#at-type').value = 'All';
+    $('#at-part').value = 'All';
+    $('#at-channel').value = 'All';
+    $('#at-cable').value = 'All';
+    $('#at-date-from').value = '';
+    $('#at-date-to').value = '';
+
+    // Apply the specific filter for this equipment
+    if (categoryLabel === 'Cable Serial') {
+      $('#at-cable').value = key;
+    } else if (categoryLabel === 'Backplane') {
+      $('#at-search').value = key;
+    } else if (categoryLabel === 'Station / Channel') {
+      const match = key.match(/(.+) \/ Ch (\d+)/);
+      if (match) {
+        $('#at-station').value = match[1];
+        $('#at-channel').value = match[2];
+      }
+    }
+
+    applyATFilters();
+  });
+
   return card;
 }
 
