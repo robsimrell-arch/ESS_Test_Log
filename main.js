@@ -1787,94 +1787,6 @@ async function confirmImport() {
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Bulk Delete – Blank Results
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/**
- * Find all records in allTestsData that have a UUT serial but blank result,
- * then show a confirmation modal with a count before soft-deleting them all.
- */
-function openBulkDeleteBlankModal() {
-  const targets = allTestsData.filter(r => r.uut_serial && !r.result);
-
-  if (!targets.length) {
-    toast('No records with a blank Result found.', false);
-    return;
-  }
-
-  // Build a short preview list (cap at 8 rows to avoid overflow)
-  const preview = targets.slice(0, 8)
-    .map(r => `Session ${r.sid} Ch ${r.channel} – ${r.uut_serial}`)
-    .join('\n');
-  const more = targets.length > 8 ? `\n… and ${targets.length - 8} more` : '';
-
-  $('#bulk-delete-info').innerHTML =
-    `<strong style="color:var(--red);">${targets.length} record(s) will be deleted:</strong><br>` +
-    `<pre style="margin-top:8px;font-size:.8rem;white-space:pre-wrap;color:var(--muted);">${preview}${more}</pre>`;
-
-  // Reset password field (clone to clear stale listeners)
-  const oldPw = $('#bulk-delete-pw');
-  const newPw = oldPw.cloneNode(true);
-  newPw.value = '';
-  oldPw.replaceWith(newPw);
-  $('#bulk-delete-error').style.display = 'none';
-
-  // Wire confirm/cancel (clone to avoid listener buildup)
-  const confirmBtn = $('#bulk-delete-confirm');
-  const cancelBtn  = $('#bulk-delete-cancel');
-  const newConfirm = confirmBtn.cloneNode(true);
-  const newCancel  = cancelBtn.cloneNode(true);
-  confirmBtn.replaceWith(newConfirm);
-  cancelBtn.replaceWith(newCancel);
-
-  newCancel.addEventListener('click', closeModal);
-  newConfirm.addEventListener('click', () => confirmBulkDeleteBlank(targets));
-  newPw.addEventListener('keydown', e => { if (e.key === 'Enter') confirmBulkDeleteBlank(targets); });
-
-  $$('.modal').forEach(m => m.style.display = 'none');
-  $('#modal-bulk-delete-blank').style.display = '';
-  $('#modal-overlay').classList.remove('hidden');
-  setTimeout(() => newPw.focus(), 80);
-}
-
-async function confirmBulkDeleteBlank(targets) {
-  const pw = $('#bulk-delete-pw').value;
-  if (pw !== 'TEngineer') {
-    $('#bulk-delete-error').style.display = '';
-    $('#bulk-delete-pw').value = '';
-    $('#bulk-delete-pw').focus();
-    return;
-  }
-
-  closeModal();
-
-  // Soft-delete each record sequentially
-  let deleted = 0;
-  for (const r of targets) {
-    try {
-      await dbDeleteUutEntry(r.sid, r.channel);
-      deleted++;
-    } catch (err) {
-      console.error('[BulkDelete] Failed for', r.sid, r.channel, err);
-    }
-  }
-
-  // Remove deleted records from the in-memory cache
-  const deletedKeys = new Set(targets.map(r => `${r.sid}_${r.channel}`));
-  allTestsData = allTestsData.filter(r => !deletedKeys.has(`${r.sid}_${r.channel}`));
-
-  // Re-render the table
-  applyATFilters();
-
-  // Push to Supabase so all browsers pick it up
-  if (typeof isSyncEnabled === 'function' && isSyncEnabled()) {
-    syncAll();
-    toast(`${deleted} blank-result record(s) deleted and synced to all browsers.`);
-  } else {
-    toast(`${deleted} blank-result record(s) deleted locally.`);
-  }
-}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Equipment Health Statistics
@@ -2233,7 +2145,7 @@ function bindEvents() {
   $('#all-tests-refresh').addEventListener('click', loadAllTests);
   $('#all-tests-export').addEventListener('click', exportAllTests);
   $('#at-clear-filters').addEventListener('click', clearATFilters);
-  $('#at-bulk-delete-blank').addEventListener('click', openBulkDeleteBlankModal);
+
 
   // Live filter listeners for All Tests
   ['at-search', 'at-result', 'at-chamber', 'at-station', 'at-type', 'at-part', 'at-channel', 'at-cable', 'at-date-from', 'at-date-to'].forEach(id => {
