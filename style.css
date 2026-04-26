@@ -179,6 +179,34 @@ button:disabled {
 .view { display: none; padding: 0; }
 .view.active { display: block; }
 
+/* ── Sticky-header views (Session History + Equipment Health) ─────────── */
+#view-history.active,
+#view-equip-health.active {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 58px);
+  overflow: hidden;
+}
+/* Everything above the data stays in place */
+#view-history .view-header,
+#view-equip-health .view-header,
+#view-equip-health .equip-controls,
+#view-equip-health .equip-summary-bar,
+#view-equip-health .equip-tab-bar { flex-shrink: 0; }
+/* Scrollable content */
+#view-history .table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  max-height: none;
+  padding: 8px 12px;
+}
+#view-equip-health .equip-section.active {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
 /* ── Welcome / Dashboard ──────────────────────────────────────────────── */
 .welcome-area {
   display: flex;
@@ -914,8 +942,8 @@ select.modal-input { cursor: pointer; }
 }
 
 /* ── Card Grid ────────────────────────────────────────────────────────── */
-.equip-section { display: none; padding: 20px; }
-.equip-section.active { display: block; }
+.equip-section { display: none; }
+.equip-section.active { display: block; } /* overridden to flex-child by #view-equip-health rule */
 
 .equip-card-grid {
   display: grid;
