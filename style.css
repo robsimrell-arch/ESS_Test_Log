@@ -199,7 +199,11 @@ button:disabled {
   overflow-y: auto;
   overflow-x: auto;
   max-height: none;
-  padding: 8px 12px;
+  padding: 0 12px 8px; /* no top padding – prevents rows showing above sticky thead */
+}
+/* UUT History: same fix for the scroll container */
+#view-all-tests .table-wrap-scroll {
+  padding-top: 0;
 }
 #view-equip-health .equip-section.active {
   flex: 1;
