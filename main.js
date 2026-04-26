@@ -11,7 +11,7 @@ import db, {
   dbAllSessions, dbSessionEntries, dbDistinct,
   dbAllTests, dbGetOpenSessions, dbSearchUut,
   dbExportAll, dbImportAll,
-  dbDeleteUutEntry,
+  dbDeleteUutEntry, dbDeleteSession,
   fmtTs,
 } from './db.js';
 import { initSync, syncAll, startAutoSync, onSyncStatus, watchConnectivity, isSyncEnabled } from './sync.js';
@@ -780,26 +780,93 @@ async function loadHistory() {
       <td>${s.id}</td><td>${s.operator}</td><td>${s.chamber}</td><td>${s.station}</td>
       <td>${s.part_number}</td><td>${s.test_type}</td>
       <td>${fmtTs(s.start_time)}</td><td>${fmtTs(s.end_time)}</td><td>${s.closed_by || '—'}</td>
-      <td><button class="btn-ghost print-btn" title="Print Report" style="padding:4px 8px;font-size:1rem;margin:-4px;line-height:1;">🖨️</button></td>
+      <td style="display:flex;gap:4px;align-items:center;">
+        <button class="btn-ghost print-btn" title="Print Report" style="padding:4px 8px;font-size:1rem;margin:0;line-height:1;">🖨️</button>
+        <button class="btn-ghost sess-del-btn" title="Delete Session" style="padding:4px 8px;font-size:1rem;margin:0;line-height:1;color:var(--red);border-color:transparent;">🗑️</button>
+      </td>
     `;
     tr.addEventListener('click', (e) => {
-      // Don't select row if clicking the print button
-      if (e.target.closest('.print-btn')) return;
+      // Don't select row if clicking the print or delete button
+      if (e.target.closest('.print-btn') || e.target.closest('.sess-del-btn')) return;
       $$('#history-tbody tr').forEach(r => r.classList.remove('selected'));
       tr.classList.add('selected');
     });
-    
-    // Add print handler
+
+    // Print handler
     const printBtn = tr.querySelector('.print-btn');
     if (printBtn) {
       printBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // prevent row click
+        e.stopPropagation();
         showReportPreview(s.id);
+      });
+    }
+
+    // Delete handler
+    const delBtn = tr.querySelector('.sess-del-btn');
+    if (delBtn) {
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSessionDeleteModal(s, tr);
       });
     }
 
     tbody.appendChild(tr);
   }
+}
+
+/**
+ * Open the password-protected session-delete modal.
+ */
+function openSessionDeleteModal(session, trEl) {
+  $('#session-delete-info').innerHTML =
+    `<strong style="color:var(--red);">Session ${session.id} will be permanently deleted:</strong><br>` +
+    `<span style="color:var(--muted);">${session.operator} &nbsp;|&nbsp; ${session.chamber} &nbsp;|&nbsp; ${session.station}</span><br>` +
+    `<span style="color:var(--muted);">Part: ${session.part_number} &nbsp;|&nbsp; ${session.test_type}</span><br>` +
+    `<span style="color:var(--muted);">Started: ${fmtTs(session.start_time)}</span>`;
+
+  const pw = $('#session-delete-pw');
+  pw.value = '';
+  $('#session-delete-error').style.display = 'none';
+
+  // Clone buttons to clear stale listeners
+  const confirmBtn = $('#session-delete-confirm');
+  const cancelBtn  = $('#session-delete-cancel');
+  const newConfirm = confirmBtn.cloneNode(true);
+  const newCancel  = cancelBtn.cloneNode(true);
+  confirmBtn.replaceWith(newConfirm);
+  cancelBtn.replaceWith(newCancel);
+
+  newCancel.addEventListener('click', closeModal);
+  newConfirm.addEventListener('click', () => confirmSessionDelete(session, trEl));
+  pw.addEventListener('keydown', e => { if (e.key === 'Enter') confirmSessionDelete(session, trEl); });
+
+  $$('.modal').forEach(m => m.style.display = 'none');
+  $('#modal-session-delete').style.display = '';
+  $('#modal-overlay').classList.remove('hidden');
+  setTimeout(() => pw.focus(), 80);
+}
+
+async function confirmSessionDelete(session, trEl) {
+  const pw = $('#session-delete-pw').value;
+  if (pw !== 'TEngineer') {
+    $('#session-delete-error').style.display = '';
+    $('#session-delete-pw').value = '';
+    $('#session-delete-pw').focus();
+    return;
+  }
+
+  closeModal();
+
+  await dbDeleteSession(session.id);
+
+  // Remove from local cache and DOM
+  historyData = historyData.filter(s => s.id !== session.id);
+  if (trEl && trEl.parentNode) trEl.remove();
+
+  // Sync to all browsers
+  if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
+
+  toast(`Session ${session.id} deleted and synced.`);
 }
 
 async function showReportPreview(sid, sessionObj = null) {

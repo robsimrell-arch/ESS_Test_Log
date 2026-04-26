@@ -158,6 +158,32 @@ export async function dbDeleteUutEntry(sid, channel) {
   await db.sessions.update(sid, { sync_status: 'pending', updated_at: now });
 }
 
+/**
+ * "Delete" a session and all its UUT entries by blanking all data fields.
+ * Rows are kept in IndexedDB for sync purposes; the sync engine will
+ * propagate the blanked state to all other browsers.
+ */
+export async function dbDeleteSession(sid) {
+  const now = new Date().toISOString();
+
+  // Blank all UUT entries for this session
+  const entries = await db.uut_entries.where('session_id').equals(sid).toArray();
+  for (const e of entries) {
+    await db.uut_entries.update(e.id, {
+      uut_serial: '', cable_serial: '', backplane: '',
+      notes: '', failure_notes: '', result: '',
+      sync_status: 'pending', updated_at: now,
+    });
+  }
+
+  // Blank the session itself (keep the row for sync, but clear identifying data)
+  await db.sessions.update(sid, {
+    operator: '', chamber: '', station: '', part_number: '',
+    test_type: '', start_time: null, end_time: null, closed_by: '',
+    sync_status: 'pending', updated_at: now,
+  });
+}
+
 export async function dbDistinct(col) {
   const all = await db.sessions.toArray();
   return [...new Set(all.map(s => s[col]).filter(Boolean))].sort();

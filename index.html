@@ -434,6 +434,35 @@
       </div>
     </div>
 
+    <!-- Delete Session (Password-Protected) modal -->
+    <div class="modal" id="modal-session-delete" style="display:none">
+      <div class="modal-header modal-header-red">
+        <h2>🗑️ Delete Session</h2>
+        <p class="modal-sub">Permanently removes this session and all its UUT entries. Requires authorization.</p>
+      </div>
+      <div class="modal-body">
+        <div id="session-delete-info" style="
+          padding: 12px 16px;
+          background: rgba(255,60,60,.08);
+          border: 1px solid var(--red);
+          border-radius: 6px;
+          font-size: .88rem;
+          color: var(--text);
+          margin-bottom: 18px;
+          line-height: 1.8;
+        "></div>
+        <label>Engineer Password</label>
+        <input type="password" id="session-delete-pw" class="modal-input" placeholder="Enter password…" autocomplete="new-password" />
+        <div id="session-delete-error" style="display:none;color:var(--red);font-size:.85rem;margin-top:8px;">
+          ❌ Incorrect password. Please try again.
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="session-delete-cancel">Cancel</button>
+        <button class="btn-danger" id="session-delete-confirm">🗑️ Delete Session</button>
+      </div>
+    </div>
+
     <!-- Report Preview Modal -->
 
     <div class="modal modal-wide" id="modal-report-preview" style="display:none">
