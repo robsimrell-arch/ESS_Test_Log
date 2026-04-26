@@ -17,7 +17,7 @@ import db, {
 import { initSync, syncAll, startAutoSync, onSyncStatus, watchConnectivity, isSyncEnabled } from './sync.js';
 import JsBarcode from 'jsbarcode';
 
-const MAX_CHANNELS = 12;
+const MAX_CHANNELS = 24;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Global State
@@ -300,7 +300,7 @@ async function confirmNewSession() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Session View (12-channel data entry)
+   Session View (24-channel data entry)
    ═══════════════════════════════════════════════════════════════════════════ */
 function createSessionView(sid, operator, chamber, station, pn, tt, restoredStart = null) {
   const container = $('#view-session');
@@ -358,7 +358,7 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
     </div>
   `;
 
-  // Build 12 rows
+  // Build 24 rows
   const tbody = div.querySelector('.session-tbody');
   for (let i = 0; i < MAX_CHANNELS; i++) {
     const ch = i + 1;
