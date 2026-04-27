@@ -2223,9 +2223,12 @@ function bindEvents() {
   $('#at-clear-filters').addEventListener('click', clearATFilters);
 
 
-  // Live filter listeners for All Tests
-  ['at-search', 'at-result', 'at-chamber', 'at-station', 'at-type', 'at-part', 'at-channel', 'at-cable', 'at-date-from', 'at-date-to'].forEach(id => {
+  // Live filter listeners for static toolbar controls only.
+  // The inline thead selects (at-result, at-chamber, etc.) are dynamic –
+  // their listeners are wired inside buildATHead() to avoid null errors on startup.
+  ['at-search', 'at-date-from', 'at-date-to'].forEach(id => {
     const el = document.getElementById(id);
+    if (!el) return;
     el.addEventListener('input', applyATFilters);
     el.addEventListener('change', applyATFilters);
   });
