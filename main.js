@@ -1600,6 +1600,11 @@ function renderATCount(rows, total) {
   const passPct = judged > 0 ? ((passes / judged) * 100).toFixed(1) : null;
   const failPct = judged > 0 ? ((fails  / judged) * 100).toFixed(1) : null;
 
+  // Pass Qty per Session — avg passes across unique sessions in visible rows
+  const uniqueSessions = new Set(rows.filter(r => r.result === 'PASS').map(r => r.sid));
+  const sessionCount   = uniqueSessions.size;
+  const passPerSess    = sessionCount > 0 ? (passes / sessionCount).toFixed(1) : null;
+
   const filtersActive = shown < total;
 
   $('#at-count').innerHTML = [
@@ -1608,6 +1613,7 @@ function renderATCount(rows, total) {
     fails   > 0 ? `<span class="rc-pill rc-fail">✗ FAIL&nbsp; ${fails}${failPct != null ? ` <span class="rc-pct">${failPct}%</span>` : ''}</span>` : '',
     aborted > 0 ? `<span class="rc-pill rc-abort">⊘ ABORTED&nbsp; ${aborted}</span>` : '',
     other   > 0 ? `<span class="rc-pill rc-blank">— Blank&nbsp; ${other}</span>` : '',
+    passPerSess != null ? `<span class="rc-pill rc-pass" title="Average PASS records per session in current view" style="opacity:.85;">📦 ${passPerSess} Pass/Sess</span>` : '',
   ].join('');
 }
 
