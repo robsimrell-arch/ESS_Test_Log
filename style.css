@@ -327,16 +327,37 @@ button:disabled {
   cursor: help;
 }
 
-/* ── Filter Bars ──────────────────────────────────────────────────────── */
-.filter-bar {
+/* ── Filter Controls & Toolbars ───────────────────────────────────────── */
+.at-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
   background: var(--header);
-  padding: 10px 16px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
-.filter-bar-2 { border-top: 1px solid var(--border); padding-top: 8px; padding-bottom: 8px; }
+.at-toolbar .rc-spacer { flex: 1; }
+.at-toolbar .record-count { padding: 0; }
+
+.at-filter-row th {
+  padding: 4px;
+  background: var(--header);
+  border-bottom: 1px solid var(--border);
+}
+.at-filter-sel {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 4px;
+  font-family: var(--font);
+  font-size: .78rem;
+  box-sizing: border-box;
+}
+.at-filter-sel:focus { border-color: var(--accent); outline: none; }
+
 .filter-icon { font-size: 1rem; }
 .filter-label { font-size: .78rem; color: var(--muted); }
 .filter-input {

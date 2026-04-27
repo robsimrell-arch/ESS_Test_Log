@@ -90,33 +90,18 @@
           <button class="btn-ghost" id="all-tests-export">📤 Export CSV</button>
         </div>
       </div>
-      <!-- Filter rows -->
-      <div class="filter-bar">
+      <!-- Slim control bar: search + date range + clear + record count -->
+      <div class="at-toolbar">
         <span class="filter-icon">🔍</span>
-        <input type="text" id="at-search" placeholder="Search…" class="filter-input" autocomplete="off" />
-        <label class="filter-label">Result:</label>
-        <select id="at-result" class="filter-select"><option>All</option><option>PASS</option><option>FAIL</option><option>ABORTED</option><option>—</option></select>
-        <label class="filter-label">Chamber:</label>
-        <select id="at-chamber" class="filter-select"></select>
-        <label class="filter-label">Station:</label>
-        <select id="at-station" class="filter-select"></select>
-        <label class="filter-label">Type:</label>
-        <select id="at-type" class="filter-select"><option>All</option><option>Full Test</option><option>Mini Test</option></select>
-        <label class="filter-label">Part #:</label>
-        <select id="at-part" class="filter-select"></select>
-      </div>
-      <div class="filter-bar filter-bar-2">
-        <label class="filter-label">Channel:</label>
-        <select id="at-channel" class="filter-select"></select>
-        <label class="filter-label">Cable Serial:</label>
-        <select id="at-cable" class="filter-select"></select>
+        <input type="text" id="at-search" placeholder="Search…" class="filter-input at-search-input" autocomplete="off" />
         <label class="filter-label">From:</label>
         <input type="date" id="at-date-from" class="filter-input filter-date" autocomplete="off" />
         <label class="filter-label">To:</label>
         <input type="date" id="at-date-to" class="filter-input filter-date" autocomplete="off" />
         <button class="btn-ghost" id="at-clear-filters">✕ Clear all filters</button>
+        <div class="rc-spacer"></div>
+        <div class="record-count" id="at-count"></div>
       </div>
-      <div class="record-count" id="at-count"></div>
       <div class="table-wrap table-wrap-scroll">
         <table id="all-tests-table" class="data-table sortable">
           <thead>

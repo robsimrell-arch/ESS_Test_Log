@@ -1028,8 +1028,18 @@ const DATA_CUTOFF_MS   = new Date('2026-04-11T08:53:15').getTime();
 const DATA_CUTOFF_DATE = '2026-04-11'; // YYYY-MM-DD for date inputs
 
 function buildATHead() {
-  const headRow = $('#at-head-row');
-  headRow.innerHTML = '';
+  const thead = $('#all-tests-table').querySelector('thead');
+
+  // Save current filter select values before wiping (sort clicks rebuild this)
+  const FILTER_IDS = ['at-result','at-chamber','at-station','at-type','at-part','at-channel','at-cable'];
+  const saved = {};
+  for (const id of FILTER_IDS) { const el = $(`#${id}`); if (el) saved[id] = el.value; }
+
+  thead.innerHTML = '';
+
+  // ── Row 1: sortable column labels ────────────────────────────────────
+  const headRow = document.createElement('tr');
+  headRow.id = 'at-head-row';
   for (const col of AT_COLS) {
     const th = document.createElement('th');
     th.className = 'sortable';
@@ -1047,9 +1057,59 @@ function buildATHead() {
   }
   // Non-sortable Delete column
   const delTh = document.createElement('th');
-  delTh.textContent = '';
   delTh.style.cssText = 'width:36px;text-align:center;';
   headRow.appendChild(delTh);
+  thead.appendChild(headRow);
+
+  // ── Row 2: per-column filter controls ────────────────────────────────
+  // Map each AT_COL key to the ID of its filter control (null = no filter)
+  const FILTER_MAP = {
+    part_number:   { type: 'select', id: 'at-part',     opts: null },
+    uut_serial:    null, // handled by at-search in toolbar
+    start_time:    null, // handled by date range in toolbar
+    operator:      null,
+    end_time:      null,
+    closed_by:     null,
+    result:        { type: 'select', id: 'at-result',   opts: ['PASS','FAIL','ABORTED','—'] },
+    sid:           null,
+    chamber:       { type: 'select', id: 'at-chamber',  opts: null },
+    station:       { type: 'select', id: 'at-station',  opts: null },
+    test_type:     { type: 'select', id: 'at-type',     opts: ['Full Test','Mini Test'] },
+    channel:       { type: 'select', id: 'at-channel',  opts: null },
+    cable_serial:  { type: 'select', id: 'at-cable',    opts: null },
+    backplane:     null,
+    notes:         null,
+    failure_notes: null,
+  };
+
+  const filterRow = document.createElement('tr');
+  filterRow.className = 'at-filter-row';
+
+  for (const col of AT_COLS) {
+    const td = document.createElement('th');
+    td.className = 'at-filter-cell';
+    const def = FILTER_MAP[col.key];
+    if (def && def.type === 'select') {
+      const sel = document.createElement('select');
+      sel.id = def.id;
+      sel.className = 'at-filter-sel';
+      // Static options (for Result, Type) or placeholder (populated by loadAllTests)
+      if (def.opts) {
+        sel.innerHTML = '<option>All</option>' + def.opts.map(o => `<option>${o}</option>`).join('');
+      } else {
+        sel.innerHTML = '<option>All</option>';
+      }
+      if (saved[def.id]) {
+        sel.value = saved[def.id];
+      }
+      sel.addEventListener('change', applyATFilters);
+      td.appendChild(sel);
+    }
+    filterRow.appendChild(td);
+  }
+  // Empty cell for delete column
+  filterRow.appendChild(document.createElement('th'));
+  thead.appendChild(filterRow);
 }
 
 async function loadAllTests() {
@@ -1057,6 +1117,9 @@ async function loadAllTests() {
   // Sync first to ensure we have data from all devices
   if (isSyncEnabled()) await syncAll();
   allTestsData = await dbAllTests();
+
+  // Build thead first so the inline filter <select> elements exist in the DOM
+  buildATHead();
 
   // Populate filter dropdowns
   const distinct = (key) => {
@@ -1076,9 +1139,9 @@ async function loadAllTests() {
   // Pre-set the From date to the data quality cutoff (only on fresh load)
   if (!$('#at-date-from').value) $('#at-date-from').value = DATA_CUTOFF_DATE;
 
-  buildATHead();
   applyATFilters();
 }
+
 
 function getATActiveRows() {
   let rows = [...allTestsData];
