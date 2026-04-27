@@ -1031,7 +1031,7 @@ function buildATHead() {
   const thead = $('#all-tests-table').querySelector('thead');
 
   // Save current filter select values before wiping (sort clicks rebuild this)
-  const FILTER_IDS = ['at-result','at-chamber','at-station','at-type','at-part','at-channel','at-cable'];
+  const FILTER_IDS = ['at-result','at-chamber','at-station','at-type','at-part','at-channel','at-cable','at-backplane'];
   const saved = {};
   for (const id of FILTER_IDS) { const el = $(`#${id}`); if (el) saved[id] = el.value; }
 
@@ -1059,7 +1059,6 @@ function buildATHead() {
   const delTh = document.createElement('th');
   delTh.style.cssText = 'width:36px;text-align:center;';
   headRow.appendChild(delTh);
-  thead.appendChild(headRow);
 
   // ── Row 2: per-column filter controls ────────────────────────────────
   // Map each AT_COL key to the ID of its filter control (null = no filter)
@@ -1077,7 +1076,7 @@ function buildATHead() {
     test_type:     { type: 'select', id: 'at-type',     opts: ['Full Test','Mini Test'] },
     channel:       { type: 'select', id: 'at-channel',  opts: null },
     cable_serial:  { type: 'select', id: 'at-cable',    opts: null },
-    backplane:     null,
+    backplane:     { type: 'select', id: 'at-backplane',opts: null },
     notes:         null,
     failure_notes: null,
   };
@@ -1095,9 +1094,9 @@ function buildATHead() {
       sel.className = 'at-filter-sel';
       // Static options (for Result, Type) or placeholder (populated by loadAllTests)
       if (def.opts) {
-        sel.innerHTML = '<option>All</option>' + def.opts.map(o => `<option>${o}</option>`).join('');
+        sel.innerHTML = '<option>All</option><option>[Exclude Blank]</option>' + def.opts.map(o => `<option>${o}</option>`).join('');
       } else {
-        sel.innerHTML = '<option>All</option>';
+        sel.innerHTML = '<option>All</option><option>[Exclude Blank]</option>';
       }
       if (saved[def.id]) {
         sel.value = saved[def.id];
@@ -1109,7 +1108,10 @@ function buildATHead() {
   }
   // Empty cell for delete column
   filterRow.appendChild(document.createElement('th'));
+  
+  // Append filter row first, then column headers (so filters are ABOVE headings)
   thead.appendChild(filterRow);
+  thead.appendChild(headRow);
 }
 
 async function loadAllTests() {
@@ -1127,7 +1129,7 @@ async function loadAllTests() {
     return vals;
   };
   const populateSelect = (sel, vals) => {
-    sel.innerHTML = '<option>All</option>' + vals.map(v => `<option>${v}</option>`).join('');
+    sel.innerHTML = '<option>All</option><option>[Exclude Blank]</option>' + vals.map(v => `<option>${v}</option>`).join('');
   };
   populateSelect($('#at-chamber'), distinct('chamber'));
   populateSelect($('#at-station'), distinct('station'));
@@ -1135,6 +1137,7 @@ async function loadAllTests() {
   const chans = [...new Set(allTestsData.map(r => r.channel).filter(c => c != null))].sort((a, b) => a - b);
   populateSelect($('#at-channel'), chans.map(String));
   populateSelect($('#at-cable'),   distinct('cable_serial'));
+  populateSelect($('#at-backplane'), distinct('backplane'));
 
   // Pre-set the From date to the data quality cutoff (only on fresh load)
   if (!$('#at-date-from').value) $('#at-date-from').value = DATA_CUTOFF_DATE;
@@ -1160,10 +1163,15 @@ function getATActiveRows() {
     { val: $('#at-part').value,    key: 'part_number' },
     { val: $('#at-channel').value, key: 'channel' },
     { val: $('#at-cable').value,   key: 'cable_serial' },
+    { val: $('#at-backplane').value, key: 'backplane' },
   ];
 
   for (const f of filters) {
     if (f.val === 'All') continue;
+    if (f.val === '[Exclude Blank]') {
+      rows = rows.filter(r => String(r[f.key] ?? '').trim() !== '');
+      continue;
+    }
     const want = f.val === '—' ? '' : f.val;
     rows = rows.filter(r => String(r[f.key] ?? '') === String(want));
   }
@@ -1271,9 +1279,10 @@ function updateATFilterDropdowns(rows) {
   const repopulate = (id, vals) => {
     const sel = $(`#${id}`);
     const current = sel.value;
-    sel.innerHTML = '<option>All</option>' + vals.map(v => `<option>${v}</option>`).join('');
+    sel.innerHTML = '<option>All</option><option>[Exclude Blank]</option>' + vals.map(v => `<option>${v}</option>`).join('');
     // Restore selected value if it still exists in the new list
-    if (current !== 'All' && vals.includes(current)) sel.value = current;
+    if (current === '[Exclude Blank]') sel.value = current;
+    else if (current !== 'All' && vals.includes(current)) sel.value = current;
   };
 
   repopulate('at-chamber', distinct('chamber'));
@@ -1286,6 +1295,7 @@ function updateATFilterDropdowns(rows) {
   repopulate('at-channel', chans);
 
   repopulate('at-cable', distinct('cable_serial'));
+  repopulate('at-backplane', distinct('backplane'));
 }
 
 
@@ -1304,7 +1314,8 @@ function openATDeleteModal(rowData, trEl) {
     part:    $('#at-part').value,
     channel: $('#at-channel').value,
     cable:   $('#at-cable').value,
-    dateFrom: $('#at-date-from').value,
+    backplane: $('#at-backplane').value,
+    dateFrom:$('#at-date-from').value,
     dateTo:   $('#at-date-to').value,
   };
 
@@ -1369,6 +1380,7 @@ async function confirmATDelete() {
   $('#at-part').value       = filterSnapshot.part;
   $('#at-channel').value    = filterSnapshot.channel;
   $('#at-cable').value      = filterSnapshot.cable;
+  $('#at-backplane').value  = filterSnapshot.backplane;
   $('#at-date-from').value  = filterSnapshot.dateFrom;
   $('#at-date-to').value    = filterSnapshot.dateTo;
 
@@ -1442,6 +1454,7 @@ function clearATFilters() {
   $('#at-part').value = 'All';
   $('#at-channel').value = 'All';
   $('#at-cable').value = 'All';
+  $('#at-backplane').value = 'All';
   $('#at-date-from').value = DATA_CUTOFF_DATE; // restore cutoff default
   $('#at-date-to').value = '';
   applyATFilters();
