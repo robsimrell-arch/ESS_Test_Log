@@ -11,7 +11,7 @@ import db, {
   dbAllSessions, dbSessionEntries, dbDistinct,
   dbAllTests, dbGetOpenSessions, dbSearchUut,
   dbExportAll, dbImportAll,
-  dbDeleteUutEntry, dbDeleteSession,
+  dbDeleteUutEntry, dbDeleteSession, dbUpdateUutEntry,
   fmtTs,
 } from './db.js';
 import { initSync, syncAll, startAutoSync, onSyncStatus, watchConnectivity, isSyncEnabled } from './sync.js';
@@ -1055,9 +1055,9 @@ function buildATHead() {
     });
     headRow.appendChild(th);
   }
-  // Non-sortable Delete column
+  // Non-sortable Actions column (edit + delete)
   const delTh = document.createElement('th');
-  delTh.style.cssText = 'width:36px;text-align:center;';
+  delTh.style.cssText = 'width:70px;text-align:center;';
   headRow.appendChild(delTh);
 
   // ── Row 2: per-column filter controls ────────────────────────────────
@@ -1242,9 +1242,20 @@ function applyATFilters() {
       return `<td>${v}</td>`;
     }).join('');
 
-    // Delete button cell
+    // Action buttons cell (edit + delete)
     const delTd = document.createElement('td');
-    delTd.style.cssText = 'text-align:center;padding:2px 4px;';
+    delTd.style.cssText = 'text-align:center;padding:2px 4px;white-space:nowrap;';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn-ghost at-edit-btn';
+    editBtn.title = 'Edit this record (password required)';
+    editBtn.innerHTML = '✏️';
+    editBtn.style.cssText = 'padding:2px 6px;font-size:.9rem;line-height:1;color:var(--accent);border-color:transparent;margin-right:2px;';
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openATEditModal(r, tr);
+    });
+
     const delBtn = document.createElement('button');
     delBtn.className = 'btn-ghost at-delete-btn';
     delBtn.title = 'Delete this record (password required)';
@@ -1254,6 +1265,8 @@ function applyATFilters() {
       e.stopPropagation();
       openATDeleteModal(r, tr);
     });
+
+    delTd.appendChild(editBtn);
     delTd.appendChild(delBtn);
     tr.appendChild(delTd);
 
@@ -1395,6 +1408,159 @@ async function confirmATDelete() {
 
   closeModal();
   toast(`Record deleted: ${rowData.uut_serial} (Sess ${rowData.sid} Ch ${rowData.channel}).`);
+}
+
+/* ── Password-protected edit for All Tests rows ──────────────────────── */
+let _atEditTarget = null; // { rowData, trEl, filterSnapshot }
+
+function _snapshotATFilters() {
+  return {
+    search:   $('#at-search').value,
+    result:   $('#at-result')?.value  ?? 'All',
+    chamber:  $('#at-chamber')?.value ?? 'All',
+    station:  $('#at-station')?.value ?? 'All',
+    type:     $('#at-type')?.value    ?? 'All',
+    part:     $('#at-part')?.value    ?? 'All',
+    channel:  $('#at-channel')?.value ?? 'All',
+    cable:    $('#at-cable')?.value   ?? 'All',
+    backplane:$('#at-backplane')?.value ?? 'All',
+    dateFrom: $('#at-date-from').value,
+    dateTo:   $('#at-date-to').value,
+  };
+}
+
+function _restoreATFilters(snap) {
+  $('#at-search').value     = snap.search;
+  if ($('#at-result'))   $('#at-result').value   = snap.result;
+  if ($('#at-chamber'))  $('#at-chamber').value  = snap.chamber;
+  if ($('#at-station'))  $('#at-station').value  = snap.station;
+  if ($('#at-type'))     $('#at-type').value     = snap.type;
+  if ($('#at-part'))     $('#at-part').value     = snap.part;
+  if ($('#at-channel'))  $('#at-channel').value  = snap.channel;
+  if ($('#at-cable'))    $('#at-cable').value    = snap.cable;
+  if ($('#at-backplane'))$('#at-backplane').value= snap.backplane;
+  $('#at-date-from').value  = snap.dateFrom;
+  $('#at-date-to').value    = snap.dateTo;
+}
+
+function openATEditModal(rowData, trEl) {
+  const filterSnapshot = _snapshotATFilters();
+  _atEditTarget = { rowData, trEl, filterSnapshot };
+
+  $$('.modal').forEach(m => m.style.display = 'none');
+  $('#modal-at-edit').style.display = '';
+  $('#modal-overlay').classList.remove('hidden');
+
+  // Show record info
+  const r = rowData;
+  $('#at-edit-info').textContent =
+    `UUT: ${r.uut_serial || '—'}  |  Session ${r.sid}  Ch ${r.channel}  |  ${r.result || 'No Result'}`;
+
+  // Reset to Phase 1 (auth)
+  $('#at-edit-auth-phase').style.display = '';
+  $('#at-edit-form-phase').style.display = 'none';
+
+  // Reset password
+  const oldPw = $('#at-edit-pw');
+  const newPw = oldPw.cloneNode(true);
+  newPw.value = '';
+  oldPw.replaceWith(newPw);
+  $('#at-edit-error').style.display = 'none';
+
+  // Show unlock button, hide save
+  $('#at-edit-unlock').style.display = '';
+  $('#at-edit-save').style.display = 'none';
+
+  // Wire buttons (clone to clear old listeners)
+  const cancelBtn  = $('#at-edit-cancel');
+  const unlockBtn  = $('#at-edit-unlock');
+  const saveBtn    = $('#at-edit-save');
+  [cancelBtn, unlockBtn, saveBtn].forEach(b => {
+    const nb = b.cloneNode(true);
+    b.replaceWith(nb);
+  });
+
+  $('#at-edit-cancel').addEventListener('click', () => { _atEditTarget = null; closeModal(); });
+  $('#at-edit-unlock').addEventListener('click', unlockATEdit);
+  $('#at-edit-save').addEventListener('click', saveATEdit);
+
+  newPw.addEventListener('keydown', e => { if (e.key === 'Enter') unlockATEdit(); });
+
+  setTimeout(() => newPw.focus(), 80);
+}
+
+function unlockATEdit() {
+  const pw = $('#at-edit-pw').value;
+  if (pw !== 'TEngineer') {
+    $('#at-edit-error').style.display = '';
+    $('#at-edit-pw').value = '';
+    $('#at-edit-pw').focus();
+    return;
+  }
+  if (!_atEditTarget) return;
+  const r = _atEditTarget.rowData;
+
+  // Transition to Phase 2: populate fields
+  $('#at-edit-auth-phase').style.display = 'none';
+  $('#at-edit-form-phase').style.display = '';
+  $('#at-edit-unlock').style.display = 'none';
+  $('#at-edit-save').style.display = '';
+
+  $('#at-edit-uut-serial').value    = r.uut_serial    || '';
+  $('#at-edit-cable-serial').value  = r.cable_serial  || '';
+  $('#at-edit-backplane').value     = r.backplane     || '';
+  $('#at-edit-result').value        = r.result        || '';
+  $('#at-edit-notes').value         = r.notes         || '';
+  $('#at-edit-failure-notes').value = r.failure_notes || '';
+
+  setTimeout(() => $('#at-edit-uut-serial').focus(), 80);
+}
+
+async function saveATEdit() {
+  if (!_atEditTarget) return;
+  const { rowData, trEl, filterSnapshot } = _atEditTarget;
+  _atEditTarget = null;
+
+  const fields = {
+    uut_serial:    $('#at-edit-uut-serial').value.trim(),
+    cable_serial:  $('#at-edit-cable-serial').value.trim(),
+    backplane:     $('#at-edit-backplane').value.trim(),
+    result:        $('#at-edit-result').value,
+    notes:         $('#at-edit-notes').value.trim(),
+    failure_notes: $('#at-edit-failure-notes').value.trim(),
+  };
+
+  await dbUpdateUutEntry(rowData.sid, rowData.channel, fields);
+
+  // Update in-memory cache
+  const cached = allTestsData.find(r => r.sid === rowData.sid && r.channel === rowData.channel);
+  if (cached) Object.assign(cached, fields);
+
+  // Restore filter state
+  _restoreATFilters(filterSnapshot);
+
+  // Re-render just the changed row's cells
+  const updatedRow = cached || { ...rowData, ...fields };
+  const resultClass = updatedRow.result === 'PASS' ? 'row-pass' : updatedRow.result === 'FAIL' ? 'row-fail' : updatedRow.result === 'ABORTED' ? 'row-abort' : '';
+  trEl.className = resultClass;
+  trEl.querySelectorAll('td:not(:last-child)').forEach((td, i) => {
+    const col = AT_COLS[i];
+    if (!col) return;
+    let v = updatedRow[col.key] ?? '';
+    if (col.key === 'start_time' || col.key === 'end_time') v = fmtTs(v);
+    if (col.key === 'closed_by' && !v) v = '—';
+    if (col.key === 'failure_notes' || col.key === 'notes') {
+      const full = String(v).replace(/"/g, '&quot;');
+      td.className = 'td-truncate';
+      td.title = full;
+    }
+    td.textContent = v;
+  });
+
+  if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
+
+  closeModal();
+  toast(`Record updated: ${updatedRow.uut_serial || '(no serial)'} (Sess ${rowData.sid} Ch ${rowData.channel}).`);
 }
 
 function exportAllTests() {

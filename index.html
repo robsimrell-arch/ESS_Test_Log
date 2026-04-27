@@ -389,7 +389,72 @@
       </div>
     </div>
 
-    <!-- Delete Session (Password-Protected) modal -->
+    <!-- Edit UUT Record (Password-Protected) modal -->
+    <div class="modal" id="modal-at-edit" style="display:none">
+      <div class="modal-header" style="background:rgba(99,179,237,.12);border-bottom:1px solid rgba(99,179,237,.25);">
+        <h2>✏️ Edit UUT Record</h2>
+        <p class="modal-sub">Password required to unlock editing.</p>
+      </div>
+      <div class="modal-body">
+        <!-- Phase 1: password -->
+        <div id="at-edit-auth-phase">
+          <div id="at-edit-info" style="
+            padding: 10px 14px;
+            background: rgba(99,179,237,.08);
+            border: 1px solid rgba(99,179,237,.3);
+            border-radius: 6px;
+            font-size: .88rem;
+            color: var(--text);
+            margin-bottom: 18px;
+            word-break: break-all;
+          "></div>
+          <label>Engineer Password</label>
+          <input type="password" id="at-edit-pw" class="modal-input" placeholder="Enter password…" autocomplete="new-password" />
+          <div id="at-edit-error" style="display:none;color:var(--red);font-size:.85rem;margin-top:8px;">
+            ❌ Incorrect password. Please try again.
+          </div>
+        </div>
+        <!-- Phase 2: edit form (hidden until unlocked) -->
+        <div id="at-edit-form-phase" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;">
+            <div>
+              <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px;">UUT Serial</label>
+              <input type="text" id="at-edit-uut-serial" class="modal-input" autocomplete="off" />
+            </div>
+            <div>
+              <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px;">Cable Serial</label>
+              <input type="text" id="at-edit-cable-serial" class="modal-input" autocomplete="off" />
+            </div>
+            <div>
+              <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px;">Backplane #</label>
+              <input type="text" id="at-edit-backplane" class="modal-input" autocomplete="off" />
+            </div>
+            <div>
+              <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px;">Result</label>
+              <select id="at-edit-result" class="modal-input" style="padding:8px 10px;">
+                <option value="">— No Result —</option>
+                <option value="PASS">PASS</option>
+                <option value="FAIL">FAIL</option>
+                <option value="ABORTED">ABORTED</option>
+              </select>
+            </div>
+            <div style="grid-column:1/-1">
+              <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px;">Operator Notes</label>
+              <textarea id="at-edit-notes" class="modal-input" rows="2" style="resize:vertical;font-family:inherit;"></textarea>
+            </div>
+            <div style="grid-column:1/-1">
+              <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px;">Failure Notes</label>
+              <textarea id="at-edit-failure-notes" class="modal-input" rows="2" style="resize:vertical;font-family:inherit;"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="at-edit-cancel">Cancel</button>
+        <button class="btn-primary" id="at-edit-unlock" style="display:none">🔓 Unlock</button>
+        <button class="btn-primary" id="at-edit-save" style="display:none">💾 Save Changes</button>
+      </div>
+    </div>
     <div class="modal" id="modal-session-delete" style="display:none">
       <div class="modal-header modal-header-red">
         <h2>🗑️ Delete Session</h2>
