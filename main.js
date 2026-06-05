@@ -297,6 +297,7 @@ async function confirmNewSession() {
   closeModal();
   createSessionView(sid, op, ch, st, pn, tt);
   await refreshStats();
+  if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2033,6 +2034,7 @@ async function confirmImport() {
     config = await loadConfig();
     await refreshStats();
     toast(`Import complete: ${result.sessions} sessions, ${result.entries} UUT entries (${mode}).`);
+    if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
   } catch (err) {
     toast(`Import failed: ${err.message}`, true);
   }
@@ -2484,7 +2486,7 @@ async function init() {
   });
   if (syncOk) {
     watchConnectivity();
-    startAutoSync(30000); // sync every 30 seconds
+    syncAll(); // sync when the app first opens
   } else {
     const el = $('#sync-status');
     if (el) {
