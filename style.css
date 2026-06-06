@@ -23,6 +23,7 @@
   --shadow:   0 8px 32px rgba(0,0,0,.45);
   --font:     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --transition: .18s ease;
+  --header-h: 58px;
 }
 
 /* ── Reset & Base ──────────────────────────────────────────────────────── */
@@ -184,7 +185,7 @@ button:disabled {
 #view-equip-health.active {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 58px);
+  height: calc(100vh - var(--header-h));
   overflow: hidden;
 }
 /* Everything above the data stays in place */
@@ -1172,4 +1173,128 @@ select.modal-input { cursor: pointer; }
 .equip-summary-dot.critical { background: var(--red); }
 .equip-summary-dot.warning  { background: var(--amber); }
 .equip-summary-dot.healthy  { background: var(--green); }
+
+/* ── Sync Status Banner ─────────────────────────────────────────────────── */
+body.has-sync-banner {
+  --header-h: 93px; /* 58px header + 35px banner */
+}
+
+.sync-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(90deg, rgba(22, 27, 34, 0.95), rgba(33, 38, 45, 0.95));
+  border-bottom: 1px solid var(--border);
+  padding: 8px 24px;
+  font-size: 0.82rem;
+  color: var(--text);
+  animation: slideDown 0.3s ease;
+  z-index: 100;
+  position: relative;
+}
+
+.sync-banner.hidden {
+  display: none !important;
+}
+
+.sync-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sync-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  display: inline-block;
+  box-shadow: 0 0 8px var(--muted);
+}
+
+.sync-indicator-dot.online {
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green);
+}
+
+.sync-indicator-dot.syncing {
+  background: var(--amber);
+  box-shadow: 0 0 10px var(--amber);
+  animation: pulse 1.5s infinite;
+}
+
+.sync-indicator-dot.offline {
+  background: var(--muted);
+  box-shadow: none;
+}
+
+.sync-banner-time-wrap {
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.sync-banner-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition);
+}
+
+.sync-banner-close:hover {
+  color: var(--red);
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.btn-sync-banner {
+  background: rgba(31, 111, 235, 0.15);
+  border: 1px solid rgba(31, 111, 235, 0.4);
+  color: var(--accent-h);
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all var(--transition);
+  margin-left: 12px;
+}
+
+.btn-sync-banner:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(31, 111, 235, 0.3);
+}
+
+.btn-sync-banner:active {
+  transform: translateY(1px);
+}
+
+.spinning {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 

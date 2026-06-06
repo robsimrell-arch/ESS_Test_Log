@@ -26,7 +26,6 @@
       </div>
       <nav class="header-right" id="main-nav">
         <span id="sync-status" style="font-size:.78rem;color:var(--muted);margin-right:4px;">⚡ Local only</span>
-        <button class="btn-ghost" id="btn-sync" title="Sync now" style="font-size:.85rem;padding:6px 10px;">🔄</button>
         <button class="btn-ghost" id="btn-settings">⚙ Settings</button>
         <button class="btn-ghost" id="btn-history">📋 Session History</button>
         <button class="btn-ghost" id="btn-all-tests">📊 UUT History</button>
@@ -35,6 +34,19 @@
       </nav>
     </header>
     <div class="accent-line"></div>
+
+    <!-- ── Sync Status Banner ──────────────────────────────── -->
+    <div id="sync-banner" class="sync-banner hidden">
+      <div class="sync-banner-content">
+        <span id="sync-banner-dot" class="sync-indicator-dot"></span>
+        <span class="sync-banner-text">
+          <span id="sync-banner-msg">Cloud Sync: Initializing...</span>
+          <span class="sync-banner-time-wrap">(Last synced: <strong id="sync-banner-time">Never</strong>)</span>
+        </span>
+        <button class="btn-sync-banner" id="btn-sync" title="Sync now">Sync Now 🔄</button>
+      </div>
+      <button id="sync-banner-close" class="sync-banner-close" title="Dismiss Banner">✕</button>
+    </div>
 
     <!-- ── Tab bar for minimized sessions ──────────────────── -->
     <div id="minimized-bar" class="hidden">

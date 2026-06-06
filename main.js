@@ -2439,6 +2439,75 @@ function bindEvents() {
   $('#modal-overlay').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeModal();
   });
+
+  // Sync banner dismiss button
+  const syncBannerClose = $('#sync-banner-close');
+  if (syncBannerClose) {
+    syncBannerClose.addEventListener('click', () => {
+      sessionStorage.setItem('ctl_sync_banner_dismissed', 'true');
+      const banner = $('#sync-banner');
+      if (banner) {
+        banner.classList.add('hidden');
+        document.body.classList.remove('has-sync-banner');
+      }
+    });
+  }
+}
+
+/* ── Cloud Sync Banner Helper ────────────────────────────────────────── */
+function updateSyncBanner(status, detail) {
+  const banner = $('#sync-banner');
+  const dot = $('#sync-banner-dot');
+  const msg = $('#sync-banner-msg');
+  const timeEl = $('#sync-banner-time');
+  if (!banner) return;
+
+  const syncEnabled = isSyncEnabled();
+  const dismissed = sessionStorage.getItem('ctl_sync_banner_dismissed') === 'true';
+
+  if (syncEnabled && !dismissed) {
+    banner.classList.remove('hidden');
+    document.body.classList.add('has-sync-banner');
+  } else {
+    banner.classList.add('hidden');
+    document.body.classList.remove('has-sync-banner');
+  }
+
+  if (dot) {
+    dot.className = 'sync-indicator-dot ' + status;
+  }
+
+  if (msg) {
+    if (status === 'syncing') {
+      msg.textContent = 'Cloud Sync: Synchronizing data...';
+    } else if (status === 'online') {
+      msg.textContent = `Cloud Sync: Active (${detail})`;
+    } else if (status === 'offline') {
+      msg.textContent = `Cloud Sync: Offline (${detail})`;
+    } else {
+      msg.textContent = `Cloud Sync: ${detail}`;
+    }
+  }
+
+  if (status === 'online') {
+    localStorage.setItem('ctl_last_sync_time', new Date().toISOString());
+  }
+
+  const lastSync = localStorage.getItem('ctl_last_sync_time');
+  if (timeEl) {
+    timeEl.textContent = lastSync ? fmtTs(lastSync) : 'Never';
+  }
+
+  const syncBtn = $('#btn-sync');
+  if (syncBtn) {
+    if (status === 'syncing') {
+      syncBtn.disabled = true;
+      syncBtn.innerHTML = 'Syncing... <span class="spinning">🔄</span>';
+    } else {
+      syncBtn.disabled = false;
+      syncBtn.innerHTML = 'Sync Now 🔄';
+    }
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2456,6 +2525,8 @@ async function init() {
   // Initialize cloud sync
   const syncOk = initSync();
   onSyncStatus(async (status, detail) => {
+    updateSyncBanner(status, detail);
+
     const el = $('#sync-status');
     if (!el) return;
     const colors = { online: 'var(--green)', syncing: 'var(--amber)', offline: 'var(--muted)' };
@@ -2484,6 +2555,7 @@ async function init() {
       await refreshStats();
     }
   });
+
   if (syncOk) {
     watchConnectivity();
     syncAll(); // sync when the app first opens
@@ -2493,6 +2565,7 @@ async function init() {
       el.style.color = 'var(--muted)';
       el.innerHTML = '⚡ Local only';
     }
+    updateSyncBanner('offline', 'Local only');
   }
 }
 
