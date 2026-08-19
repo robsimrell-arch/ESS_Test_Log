@@ -48,11 +48,18 @@ const DEFAULT_CONFIG = {
   // chamber_part_matrix: { 'CH-01': ['PN-A', 'PN-B'], ... }
   // A chamber with NO entry (or an empty array) accepts all parts.
   chamber_part_matrix: {},
+  max_full_tests: 1,
+  max_mini_tests: 2,
 };
 
 export async function loadConfig() {
   const row = await db.config.get('settings');
-  if (row) return row.value;
+  if (row && row.value) {
+    const val = { ...row.value };
+    if (val.max_full_tests === undefined) val.max_full_tests = 1;
+    if (val.max_mini_tests === undefined) val.max_mini_tests = 2;
+    return val;
+  }
   // Initialize default without marking it as a new edit to be pushed.
   // Use a very old timestamp so any Supabase config will reliably overwrite this default on the first pull.
   await db.config.put({ key: 'settings', value: { ...DEFAULT_CONFIG }, sync_status: 'synced', updated_at: '2000-01-01T00:00:00.000Z' });
@@ -297,6 +304,77 @@ export async function dbSearchUut(serial) {
       result:        e.result || '',
     };
   }).filter(Boolean).sort((a,b) => (b.start_time||'').localeCompare(a.start_time||''));
+}
+
+/**
+ * Retrieve test counts and history for a given UUT serial (case-insensitive exact match).
+ * Only counts completed test runs (sessions with end_time or entries with a recorded result).
+ * 
+ * @param {string} serial
+ * @returns {Promise<{ full: number, mini: number, other: number, total: number, runs: Array }>}
+ */
+export async function getUutTestCounts(serial) {
+  if (!serial || !serial.trim()) {
+    return { full: 0, mini: 0, other: 0, total: 0, runs: [] };
+  }
+  const target = serial.trim().toLowerCase();
+  const entries = await db.uut_entries.toArray();
+  const sessions = await db.sessions.toArray();
+  const sMap = Object.fromEntries(sessions.map(s => [s.id, s]));
+
+  // Deduplicate entries by session_id + channel (taking latest updated_at)
+  const latestBySessionChannel = new Map();
+  for (const e of entries) {
+    if (!e.uut_serial || e.uut_serial.trim().toLowerCase() !== target) continue;
+    const key = `${e.session_id}_${e.channel}`;
+    const existing = latestBySessionChannel.get(key);
+    if (!existing || (e.updated_at && existing.updated_at && e.updated_at > existing.updated_at)) {
+      latestBySessionChannel.set(key, e);
+    }
+  }
+
+  let full = 0;
+  let mini = 0;
+  let other = 0;
+  const runs = [];
+
+  for (const e of latestBySessionChannel.values()) {
+    const s = sMap[e.session_id];
+    if (!s || !s.part_number) continue; // skip deleted/blanked sessions
+    // Completed test: has end_time or has result
+    const isCompleted = Boolean(s.end_time || e.result);
+    if (!isCompleted) continue;
+
+    const tt = s.test_type || '';
+    if (/full/i.test(tt)) {
+      full++;
+    } else if (/mini/i.test(tt)) {
+      mini++;
+    } else {
+      other++;
+    }
+
+    runs.push({
+      session_id: s.id,
+      operator: s.operator,
+      chamber: s.chamber,
+      station: s.station,
+      part_number: s.part_number,
+      test_type: s.test_type,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      channel: e.channel,
+      result: e.result || '',
+    });
+  }
+
+  return {
+    full,
+    mini,
+    other,
+    total: full + mini + other,
+    runs: runs.sort((a, b) => (b.start_time || '').localeCompare(a.start_time || '')),
+  };
 }
 
 /* ── Full DB Export / Import ──────────────────────────────────────────── */

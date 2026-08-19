@@ -12,6 +12,7 @@ import db, {
   dbAllTests, dbGetOpenSessions, dbSearchUut,
   dbExportAll, dbImportAll,
   dbDeleteUutEntry, dbDeleteSession, dbUpdateUutEntry,
+  getUutTestCounts,
   fmtTs,
 } from './db.js';
 import { initSync, syncAll, startAutoSync, onSyncStatus, watchConnectivity, isSyncEnabled } from './sync.js';
@@ -301,8 +302,95 @@ async function confirmNewSession() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Session View (24-channel data entry)
+   Session View (24-channel data entry) & UUT Limit Checking
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Check if a UUT serial has reached its test limit for a given session test type.
+ * @param {string} serial - UUT serial number
+ * @param {string} sessionTestType - "Full Test" or "Mini Test" (or custom)
+ * @returns {Promise<{ valid: boolean, limitReached: boolean, reason: string, counts: object, maxFull: number, maxMini: number }>}
+ */
+async function checkUutLimit(serial, sessionTestType) {
+  if (!serial || !serial.trim()) {
+    return { valid: true, limitReached: false, reason: '', counts: { full: 0, mini: 0, total: 0 }, maxFull: 1, maxMini: 2 };
+  }
+  const maxFull = config.max_full_tests ?? 1;
+  const maxMini = config.max_mini_tests ?? 2;
+  const counts = await getUutTestCounts(serial.trim());
+
+  const isFullSession = /full/i.test(sessionTestType);
+  const isMiniSession = /mini/i.test(sessionTestType);
+
+  let limitReached = false;
+  let reason = '';
+
+  if (isFullSession && counts.full >= maxFull) {
+    limitReached = true;
+    reason = `Full Test limit reached (${counts.full}/${maxFull} Full Tests completed)`;
+  } else if (isMiniSession && counts.mini >= maxMini) {
+    limitReached = true;
+    reason = `Mini Test limit reached (${counts.mini}/${maxMini} Mini Tests completed)`;
+  }
+
+  return {
+    valid: !limitReached,
+    limitReached,
+    reason,
+    counts,
+    maxFull,
+    maxMini,
+  };
+}
+
+/**
+ * Validate a specific UUT row against configured test limits and update cell styling/badges.
+ */
+async function validateUutRow(r, sess, showWarningToast = false) {
+  const input = r.tr.querySelector('[data-field="uut_serial"]');
+  const badge = r.tr.querySelector('.uut-limit-badge');
+  if (!input) return { valid: true };
+
+  const serial = input.value.trim();
+  if (!serial) {
+    input.classList.remove('input-limit-exceeded');
+    input.removeAttribute('title');
+    if (badge) {
+      badge.style.display = 'none';
+      badge.textContent = '';
+      badge.className = 'uut-limit-badge';
+    }
+    return { valid: true };
+  }
+
+  const check = await checkUutLimit(serial, sess.tt);
+  const { counts, maxFull, maxMini, limitReached, reason } = check;
+
+  if (limitReached) {
+    input.classList.add('input-limit-exceeded');
+    input.title = `⚠ ${reason}`;
+    if (badge) {
+      badge.style.display = 'inline-flex';
+      badge.className = 'uut-limit-badge limit-reached';
+      badge.innerHTML = `⚠ Limit Reached (${counts.full}/${maxFull} Full, ${counts.mini}/${maxMini} Mini)`;
+    }
+    if (showWarningToast) {
+      toast(`⚠ UUT "${serial}" on Ch ${r.ch} has reached its test limit (${counts.full}/${maxFull} Full, ${counts.mini}/${maxMini} Mini). Further testing in ${sess.tt} is prohibited.`, true);
+    }
+    return { valid: false, reason, serial, channel: r.ch };
+  } else {
+    input.classList.remove('input-limit-exceeded');
+    input.removeAttribute('title');
+    if (badge) {
+      badge.style.display = 'inline-flex';
+      const hasSomeTests = (counts.full > 0 || counts.mini > 0);
+      badge.className = 'uut-limit-badge ' + (hasSomeTests ? 'limit-warning' : 'limit-ok');
+      badge.innerHTML = `✓ ${counts.full}/${maxFull} Full, ${counts.mini}/${maxMini} Mini`;
+    }
+    return { valid: true, counts };
+  }
+}
+
 function createSessionView(sid, operator, chamber, station, pn, tt, restoredStart = null) {
   const container = $('#view-session');
 
@@ -368,7 +456,10 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
     tr.className = rowClass;
     tr.innerHTML = `
       <td class="ch-cell">${ch}</td>
-      <td><input type="text" data-field="uut_serial" placeholder="" /></td>
+      <td class="uut-cell-wrap">
+        <input type="text" data-field="uut_serial" placeholder="" />
+        <div class="uut-limit-badge" style="display:none;"></div>
+      </td>
       <td><input type="text" data-field="cable_serial" placeholder="" /></td>
       <td><input type="text" data-field="backplane" placeholder="" /></td>
       <td><input type="text" data-field="notes" placeholder="" /></td>
@@ -376,6 +467,9 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
       <td><button class="result-btn r-none" data-result="">—</button></td>
     `;
     tbody.appendChild(tr);
+
+    const rowObj = { ch, tr };
+    sess.rows.push(rowObj);
 
     // Result toggle
     const resultBtn = tr.querySelector('.result-btn');
@@ -393,6 +487,18 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
       resultBtn.textContent = next || '—';
     });
 
+    // Real-time limit check for UUT serial
+    const uutInput = tr.querySelector('[data-field="uut_serial"]');
+    uutInput.addEventListener('input', () => {
+      validateUutRow(rowObj, sess, false);
+    });
+    uutInput.addEventListener('change', () => {
+      validateUutRow(rowObj, sess, true);
+    });
+    uutInput.addEventListener('blur', () => {
+      validateUutRow(rowObj, sess, true);
+    });
+
     // Enter key → move to same column in next row
     const inputs = tr.querySelectorAll('input');
     inputs.forEach((input, colIdx) => {
@@ -407,8 +513,6 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
         if (nextInputs[colIdx]) nextInputs[colIdx].focus();
       });
     });
-
-    sess.rows.push({ ch, tr });
   }
 
   container.appendChild(div);
@@ -497,6 +601,22 @@ async function startSession(sess) {
   if (missingUUT.length) errors.push(`UUT Serial required on: ${missingUUT.join(', ')}`);
   if (errors.length) {
     toast(errors.join('\n'), true);
+    return;
+  }
+
+  // UUT Test Limit validation (hard block)
+  const limitErrors = [];
+  for (const r of sess.rows) {
+    const input = r.tr.querySelector('[data-field="uut_serial"]');
+    const uut = input ? input.value.trim() : '';
+    if (!uut) continue;
+    const res = await validateUutRow(r, sess, false);
+    if (!res.valid) {
+      limitErrors.push(`Ch ${r.ch} (${uut}): ${res.reason}`);
+    }
+  }
+  if (limitErrors.length > 0) {
+    toast(`Cannot start session — UUT test limit reached:\n${limitErrors.join('\n')}`, true);
     return;
   }
 
@@ -938,13 +1058,23 @@ async function viewUUTDetail() {
   $('#detail-title').textContent = `Session ${sid} – UUT Details`;
   const tbody = $('#detail-tbody');
   tbody.innerHTML = '';
+  const maxFull = config.max_full_tests ?? 1;
+  const maxMini = config.max_mini_tests ?? 2;
+
   for (const e of entries) {
     const resultClass = e.result === 'PASS' ? 'pass' : e.result === 'FAIL' ? 'fail' : e.result === 'ABORTED' ? 'abort' : '';
+    let cycleHtml = '<span style="color:var(--muted)">—</span>';
+    if (e.uut_serial) {
+      const counts = await getUutTestCounts(e.uut_serial);
+      const isLimit = (counts.full >= maxFull) || (counts.mini >= maxMini);
+      cycleHtml = `<span class="cycle-tag ${isLimit ? 'tag-limit' : 'tag-ok'}">${counts.full}/${maxFull} Full, ${counts.mini}/${maxMini} Mini${isLimit ? ' ⚠' : ''}</span>`;
+    }
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${e.channel}</td><td>${e.uut_serial || ''}</td><td>${e.cable_serial || ''}</td>
       <td>${e.backplane || ''}</td><td>${e.notes || ''}</td><td>${e.failure_notes || ''}</td>
       <td class="${resultClass}">${e.result || ''}</td>
+      <td>${cycleHtml}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -1660,8 +1790,18 @@ async function doSearch() {
     return;
   }
 
-  lbl.textContent = `${searchResults.length} result(s) for "${q}"`;
-  lbl.style.color = 'var(--green)';
+  const counts = await getUutTestCounts(q);
+  const maxFull = config.max_full_tests ?? 1;
+  const maxMini = config.max_mini_tests ?? 2;
+  const isLimit = (counts.full >= maxFull) || (counts.mini >= maxMini);
+
+  let limitBadgeHtml = '';
+  if (counts.total > 0) {
+    limitBadgeHtml = ` <span class="cycle-tag ${isLimit ? 'tag-limit' : 'tag-ok'}" style="margin-left:8px;">${counts.full}/${maxFull} Full, ${counts.mini}/${maxMini} Mini${isLimit ? ' — LIMIT REACHED' : ''}</span>`;
+  }
+
+  lbl.innerHTML = `${searchResults.length} result(s) for "${q}"${limitBadgeHtml}`;
+  lbl.style.color = 'var(--text)';
 
   for (const r of searchResults) {
     const resultClass = r.result === 'PASS' ? 'pass' : r.result === 'FAIL' ? 'fail' : r.result === 'ABORTED' ? 'abort' : '';
@@ -1680,7 +1820,7 @@ async function doSearch() {
 function clearSearch() {
   $('#search-input').value = '';
   $('#search-tbody').innerHTML = '';
-  $('#search-result-label').textContent = '';
+  $('#search-result-label').innerHTML = '';
   searchResults = [];
 }
 
@@ -1705,6 +1845,10 @@ function loadSettingsView() {
   showView('view-settings');
   renderSettingsLists();
   renderMatrix();
+  const maxFullInput = $('#setting-max-full');
+  const maxMiniInput = $('#setting-max-mini');
+  if (maxFullInput) maxFullInput.value = config.max_full_tests ?? 1;
+  if (maxMiniInput) maxMiniInput.value = config.max_mini_tests ?? 2;
 }
 
 function renderSettingsLists() {
@@ -1767,6 +1911,11 @@ function initSettingsEvents() {
   });
 
   $('#settings-save').addEventListener('click', async () => {
+    const maxFullInput = $('#setting-max-full');
+    const maxMiniInput = $('#setting-max-mini');
+    if (maxFullInput) config.max_full_tests = Math.max(1, parseInt(maxFullInput.value) || 1);
+    if (maxMiniInput) config.max_mini_tests = Math.max(0, parseInt(maxMiniInput.value) || 0);
+
     await saveConfig(config);
     toast('Settings saved.');
     showView('view-dashboard');
@@ -1883,6 +2032,7 @@ async function restoreOpenSessions() {
         const cls = { '': 'r-none', 'PASS': 'r-pass', 'FAIL': 'r-fail', 'ABORTED': 'r-aborted' }[e.result || ''];
         btn.className = 'result-btn ' + cls;
         btn.textContent = e.result || '—';
+        validateUutRow(row, sess, false);
       }
 
       // Minimise restored sessions so user can open them from the bar
@@ -1943,6 +2093,7 @@ async function refreshActiveSessions() {
         btn.className = 'result-btn ' + cls;
         btn.textContent = e.result || '—';
       }
+      validateUutRow(row, sess, false);
     }
   }
   refreshMinBar();

@@ -684,6 +684,71 @@ select.modal-input { cursor: pointer; }
   background: var(--bg);
 }
 
+/* UUT Test Limit Warning Styles */
+.session-table input.input-limit-exceeded {
+  border: 1px solid var(--red) !important;
+  background: rgba(248, 81, 73, 0.18) !important;
+  color: #ff7b72 !important;
+}
+.session-table input.input-limit-exceeded:focus {
+  border-color: var(--red-h) !important;
+  box-shadow: 0 0 6px rgba(248, 81, 73, 0.5) !important;
+}
+
+.uut-cell-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.uut-limit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+.uut-limit-badge.limit-ok {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+}
+
+.uut-limit-badge.limit-warning {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--amber);
+  border: 1px solid rgba(210, 153, 34, 0.3);
+}
+
+.uut-limit-badge.limit-reached {
+  background: rgba(248, 81, 73, 0.2);
+  color: var(--red);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+}
+
+.cycle-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cycle-tag.tag-ok {
+  background: rgba(63, 185, 80, 0.12);
+  color: var(--green);
+}
+.cycle-tag.tag-limit {
+  background: rgba(248, 81, 73, 0.18);
+  color: var(--red);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+}
+
 .row-even td { background: var(--surface); }
 .row-odd  td { background: var(--header); }
 .row-even .ch-cell { background: var(--surface); }
