@@ -379,10 +379,12 @@ export async function getUutTestCounts(serial) {
   };
 }
 
+export const DATA_CUTOFF_MS = new Date('2026-04-11T08:53:15').getTime();
+
 /**
  * Retrieve all unique UUTs that have failed a Full Test and are awaiting a Mini Test.
  * A UUT qualifies if:
- * 1. It has at least one completed Full Test with result = 'FAIL'.
+ * 1. It has at least one completed Full Test with result = 'FAIL' (on or after 4-11-2026).
  * 2. It has NOT achieved a 'PASS' on any subsequent Mini Test.
  * 3. It has completed fewer Mini Tests than max_mini_tests (default 2).
  *
@@ -412,6 +414,11 @@ export async function getAwaitingMiniTestUuts() {
   for (const e of latestBySessionChannel.values()) {
     const s = sMap[e.session_id];
     if (!s || !s.part_number) continue; // skip deleted/blanked sessions
+
+    // Exclude records before cutoff date (4-11-2026)
+    const t = s.start_time || s.end_time;
+    if (!t || new Date(t).getTime() < DATA_CUTOFF_MS) continue;
+
     const isCompleted = Boolean(s.end_time || e.result);
     if (!isCompleted) continue;
 
