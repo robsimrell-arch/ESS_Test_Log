@@ -449,6 +449,18 @@ export async function getAwaitingMiniTestUuts() {
     // Sort runs chronologically descending (latest first)
     runs.sort((a, b) => (b.start_time || '').localeCompare(a.start_time || ''));
 
+    // Do not include if the last test was a Full test and it passed
+    const latestRun = runs[0];
+    if (latestRun && /full/i.test(latestRun.test_type) && latestRun.result === 'PASS') {
+      continue;
+    }
+
+    // Also do not include if the most recent Full test passed
+    const latestFull = runs.find(r => /full/i.test(r.test_type));
+    if (latestFull && latestFull.result === 'PASS') {
+      continue;
+    }
+
     let hasFullFail = false;
     let hasMiniPass = false;
     let miniCount = 0;
