@@ -12,7 +12,7 @@ import db, {
   dbAllTests, dbGetOpenSessions, dbSearchUut,
   dbExportAll, dbImportAll,
   dbDeleteUutEntry, dbDeleteSession, dbUpdateUutEntry,
-  getUutTestCounts,
+  getUutTestCounts, getAwaitingMiniTestUuts,
   fmtTs,
 } from './db.js';
 import { initSync, syncAll, startAutoSync, onSyncStatus, watchConnectivity, isSyncEnabled } from './sync.js';
@@ -121,31 +121,42 @@ function downloadJSON(filename, obj) {
    ═══════════════════════════════════════════════════════════════════════════ */
 async function refreshStats() {
   const totalSessions = (await dbAllSessions()).length;
+  const awaitingList = await getAwaitingMiniTestUuts();
 
   const welcomeTitle = $('#welcome-title');
   const welcomeHint  = $('#welcome-hint');
   const welcomeIcon  = document.querySelector('.welcome-icon');
 
   if (activeSessions.length > 0) {
-    welcomeIcon.style.display = 'none';
-    welcomeTitle.style.display = 'none';
-    welcomeHint.style.display = 'none';
+    if (welcomeIcon) welcomeIcon.style.display = 'none';
+    if (welcomeTitle) welcomeTitle.style.display = 'none';
+    if (welcomeHint) welcomeHint.style.display = 'none';
   } else {
-    welcomeIcon.style.display = '';
-    welcomeTitle.style.display = '';
-    welcomeHint.style.display = '';
+    if (welcomeIcon) welcomeIcon.style.display = '';
+    if (welcomeTitle) welcomeTitle.style.display = '';
+    if (welcomeHint) welcomeHint.style.display = '';
   }
 
   const cards = $('#stats-cards');
+  if (!cards) return;
   cards.innerHTML = '';
   const data = [
-    { val: totalSessions, lbl: 'Total Sessions', color: 'var(--accent)' },
-    { val: activeSessions.length, lbl: 'Active Sessions', color: 'var(--green)' },
+    { val: totalSessions, lbl: 'Total Sessions', color: 'var(--accent)', clickable: false },
+    { val: activeSessions.length, lbl: 'Active Sessions', color: 'var(--green)', clickable: false },
+    { val: awaitingList.length, lbl: 'Awaiting Mini Test', color: 'var(--amber)', clickable: true, hint: 'Click to view' },
   ];
   for (const d of data) {
     const card = document.createElement('div');
-    card.className = 'stat-card';
-    card.innerHTML = `<div class="stat-val" style="color:${d.color}">${d.val}</div><div class="stat-lbl">${d.lbl}</div>`;
+    card.className = 'stat-card' + (d.clickable ? ' clickable' : '');
+    card.innerHTML = `
+      <div class="stat-val" style="color:${d.color}">${d.val}</div>
+      <div class="stat-lbl">${d.lbl}</div>
+      ${d.hint ? `<div class="stat-card-hint">${d.hint} ↗</div>` : ''}
+    `;
+    if (d.clickable) {
+      card.title = 'Click to view UUTs awaiting mini test';
+      card.addEventListener('click', () => openAwaitingMiniModal());
+    }
     cards.appendChild(card);
   }
 }
@@ -1879,6 +1890,99 @@ function exportSearchResults() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Awaiting Mini Test Modal
+   ═══════════════════════════════════════════════════════════════════════════ */
+let _awaitingMiniList = [];
+
+async function openAwaitingMiniModal() {
+  _awaitingMiniList = await getAwaitingMiniTestUuts();
+
+  const modal = $('#modal-awaiting-mini');
+  const overlay = $('#modal-overlay');
+  const badge = $('#awaiting-badge');
+  const searchInput = $('#awaiting-search-input');
+
+  if (searchInput) searchInput.value = '';
+  if (badge) badge.textContent = `${_awaitingMiniList.length} UUT${_awaitingMiniList.length === 1 ? '' : 's'}`;
+
+  renderAwaitingTable(_awaitingMiniList);
+
+  $$('.modal').forEach(m => m.style.display = 'none');
+  modal.style.display = '';
+  overlay.classList.remove('hidden');
+  if (searchInput) setTimeout(() => searchInput.focus(), 80);
+}
+
+function renderAwaitingTable(list) {
+  const tbody = $('#awaiting-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px;">No UUTs currently awaiting mini test.</td></tr>`;
+    return;
+  }
+
+  for (const r of list) {
+    const tr = document.createElement('tr');
+    const miniBadgeClass = r.mini_count === 0 ? 'mini-usage-badge none-used' : 'mini-usage-badge';
+    tr.innerHTML = `
+      <td><strong>${r.uut_serial}</strong></td>
+      <td>${r.part_number || '—'}</td>
+      <td>${fmtTs(r.failed_date)}</td>
+      <td>Chamber ${r.chamber || '—'} / ${r.station || '—'}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.failure_notes || '').replace(/"/g, '&quot;')}">${r.failure_notes || '—'}</td>
+      <td><span class="${miniBadgeClass}">${r.mini_count} / ${r.max_mini} used</span></td>
+      <td style="text-align:center;">
+        <button class="btn-ghost btn-awaiting-view" data-serial="${r.uut_serial}" style="padding:4px 10px;font-size:0.8rem;" title="View full history for this serial">🔍 View History</button>
+      </td>
+    `;
+
+    const viewBtn = tr.querySelector('.btn-awaiting-view');
+    if (viewBtn) {
+      viewBtn.addEventListener('click', () => {
+        closeModal();
+        showView('view-search');
+        $('#search-input').value = r.uut_serial;
+        doSearch();
+      });
+    }
+
+    tbody.appendChild(tr);
+  }
+}
+
+function filterAwaitingModal() {
+  const q = ($('#awaiting-search-input')?.value || '').trim().toLowerCase();
+  if (!q) {
+    renderAwaitingTable(_awaitingMiniList);
+    return;
+  }
+  const filtered = _awaitingMiniList.filter(r =>
+    r.uut_serial.toLowerCase().includes(q) ||
+    (r.part_number && r.part_number.toLowerCase().includes(q)) ||
+    (r.chamber && r.chamber.toLowerCase().includes(q)) ||
+    (r.station && r.station.toLowerCase().includes(q)) ||
+    (r.failure_notes && r.failure_notes.toLowerCase().includes(q))
+  );
+  renderAwaitingTable(filtered);
+}
+
+function exportAwaitingCSV() {
+  if (!_awaitingMiniList.length) {
+    toast('No awaiting UUTs to export.', true);
+    return;
+  }
+  let csv = 'UUT Serial Number,Part Number,Failed Full Test Date,Chamber,Station,Failure Notes,Mini Tests Done,Max Mini Tests\n';
+  for (const r of _awaitingMiniList) {
+    csv += `"${r.uut_serial}","${r.part_number||''}","${fmtTs(r.failed_date)}","${r.chamber||''}","${r.station||''}","${(r.failure_notes||'').replace(/"/g, '""')}",${r.mini_count},${r.max_mini}\n`;
+  }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  downloadCSV(`UUTs_Awaiting_Mini_Test_${dateStr}.csv`, csv);
+  toast('Awaiting Mini Test CSV exported.');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Settings View
    ═══════════════════════════════════════════════════════════════════════════ */
 function loadSettingsView() {
@@ -2636,6 +2740,16 @@ function bindEvents() {
       await refreshStats();
     });
   }
+
+  // Awaiting Mini Test modal
+  const awaitingModalClose = $('#awaiting-modal-close');
+  if (awaitingModalClose) awaitingModalClose.addEventListener('click', closeModal);
+  const awaitingCloseBtn = $('#awaiting-close-btn');
+  if (awaitingCloseBtn) awaitingCloseBtn.addEventListener('click', closeModal);
+  const awaitingSearch = $('#awaiting-search-input');
+  if (awaitingSearch) awaitingSearch.addEventListener('input', filterAwaitingModal);
+  const awaitingExport = $('#awaiting-export-btn');
+  if (awaitingExport) awaitingExport.addEventListener('click', exportAwaitingCSV);
 
   // Close modal on overlay click (outside modal)
   $('#modal-overlay').addEventListener('click', (e) => {

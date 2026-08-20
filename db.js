@@ -379,6 +379,117 @@ export async function getUutTestCounts(serial) {
   };
 }
 
+/**
+ * Retrieve all unique UUTs that have failed a Full Test and are awaiting a Mini Test.
+ * A UUT qualifies if:
+ * 1. It has at least one completed Full Test with result = 'FAIL'.
+ * 2. It has NOT achieved a 'PASS' on any subsequent Mini Test.
+ * 3. It has completed fewer Mini Tests than max_mini_tests (default 2).
+ *
+ * @returns {Promise<Array<{ uut_serial: string, part_number: string, failed_date: string, chamber: string, station: string, failure_notes: string, mini_count: number, max_mini: number, latest_sid: number }>>}
+ */
+export async function getAwaitingMiniTestUuts() {
+  const cfg = await loadConfig();
+  const maxMini = cfg.max_mini_tests ?? 2;
+
+  const entries = await db.uut_entries.toArray();
+  const sessions = await db.sessions.toArray();
+  const sMap = Object.fromEntries(sessions.map(s => [s.id, s]));
+
+  // Deduplicate entries per session_id + channel taking latest updated_at
+  const latestBySessionChannel = new Map();
+  for (const e of entries) {
+    if (!e.uut_serial || !e.uut_serial.trim()) continue;
+    const key = `${e.session_id}_${e.channel}`;
+    const existing = latestBySessionChannel.get(key);
+    if (!existing || (e.updated_at && existing.updated_at && e.updated_at > existing.updated_at)) {
+      latestBySessionChannel.set(key, e);
+    }
+  }
+
+  // Group by unique UUT serial (case-insensitive)
+  const uutMap = new Map();
+  for (const e of latestBySessionChannel.values()) {
+    const s = sMap[e.session_id];
+    if (!s || !s.part_number) continue; // skip deleted/blanked sessions
+    const isCompleted = Boolean(s.end_time || e.result);
+    if (!isCompleted) continue;
+
+    const serialTrimmed = e.uut_serial.trim();
+    const lc = serialTrimmed.toLowerCase();
+    if (!uutMap.has(lc)) {
+      uutMap.set(lc, { serial: serialTrimmed, runs: [] });
+    }
+    uutMap.get(lc).runs.push({
+      session_id: s.id,
+      operator: s.operator || '',
+      chamber: s.chamber || '',
+      station: s.station || '',
+      part_number: s.part_number || '',
+      test_type: s.test_type || '',
+      start_time: s.start_time || '',
+      end_time: s.end_time || '',
+      channel: e.channel,
+      result: (e.result || '').toUpperCase(),
+      failure_notes: e.failure_notes || '',
+      notes: e.notes || '',
+    });
+  }
+
+  const results = [];
+
+  for (const { serial, runs } of uutMap.values()) {
+    // Sort runs chronologically descending (latest first)
+    runs.sort((a, b) => (b.start_time || '').localeCompare(a.start_time || ''));
+
+    let hasFullFail = false;
+    let hasMiniPass = false;
+    let miniCount = 0;
+    let latestFullFail = null;
+    let latestPartNumber = '';
+
+    for (const r of runs) {
+      if (!latestPartNumber && r.part_number) latestPartNumber = r.part_number;
+
+      const isFull = /full/i.test(r.test_type);
+      const isMini = /mini/i.test(r.test_type);
+
+      if (isFull) {
+        if (r.result === 'FAIL') {
+          hasFullFail = true;
+          if (!latestFullFail) latestFullFail = r;
+        }
+      } else if (isMini) {
+        miniCount++;
+        if (r.result === 'PASS') {
+          hasMiniPass = true;
+        }
+      }
+    }
+
+    // Qualification condition:
+    // 1. Has at least one Full Test FAIL
+    // 2. Has NOT passed any Mini Test
+    // 3. Mini test count < maxMini
+    if (hasFullFail && !hasMiniPass && miniCount < maxMini) {
+      results.push({
+        uut_serial: serial,
+        part_number: latestFullFail?.part_number || latestPartNumber,
+        failed_date: latestFullFail?.start_time || '',
+        chamber: latestFullFail?.chamber || '',
+        station: latestFullFail?.station || '',
+        failure_notes: latestFullFail?.failure_notes || '',
+        mini_count: miniCount,
+        max_mini: maxMini,
+        latest_sid: latestFullFail?.session_id || 0,
+      });
+    }
+  }
+
+  // Sort by latest failure date descending
+  return results.sort((a, b) => (b.failed_date || '').localeCompare(a.failed_date || ''));
+}
+
 /* ── Full DB Export / Import ──────────────────────────────────────────── */
 
 /**

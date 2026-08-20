@@ -267,6 +267,41 @@ button:disabled {
   text-transform: uppercase;
   letter-spacing: .5px;
 }
+.stat-card.clickable {
+  cursor: pointer;
+  position: relative;
+}
+.stat-card.clickable:hover {
+  border-color: var(--amber);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(210,153,34,0.3);
+}
+.stat-card.clickable:active {
+  transform: translateY(-1px);
+}
+.stat-card-hint {
+  font-size: .68rem;
+  color: var(--amber);
+  margin-top: 4px;
+  font-weight: 600;
+  letter-spacing: .3px;
+}
+
+.mini-usage-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: .8rem;
+  font-weight: 700;
+  background: rgba(210,153,34,0.15);
+  color: var(--amber);
+  border: 1px solid rgba(210,153,34,0.35);
+}
+.mini-usage-badge.none-used {
+  background: rgba(88,166,255,0.15);
+  color: #58a6ff;
+  border-color: rgba(88,166,255,0.35);
+}
 
 /* ── View Header ──────────────────────────────────────────────────────── */
 .view-header {
