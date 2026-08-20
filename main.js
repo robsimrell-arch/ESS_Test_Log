@@ -415,6 +415,7 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
         <span class="session-meta">Station: ${station} | Part: ${pn} | Type: ${tt} | Operator: ${operator}</span>
       </div>
       <div>
+        <button class="btn-ghost btn-cancel-sess" style="color:var(--red);border-color:rgba(248,81,73,0.35);margin-right:6px;" title="Cancel and discard this unstarted session">✕ Cancel Session</button>
         <button class="btn-ghost btn-back-dash">← Dashboard</button>
         <button class="btn-ghost btn-minimize-sess">⊟ Minimize</button>
       </div>
@@ -520,6 +521,8 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
   activeSessions.push(sess);
 
   // Bind actions
+  const cancelBtn = div.querySelector('.btn-cancel-sess');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => cancelSession(sess));
   div.querySelector('.btn-start-sess').addEventListener('click', () => startSession(sess));
   div.querySelector('.btn-end-sess').addEventListener('click', () => endSession(sess));
   div.querySelector('.btn-save-sess').addEventListener('click', () => saveSession(sess));
@@ -533,6 +536,7 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
   if (restoredStart) {
     sess.startTime = restoredStart;
     sess.started = true;
+    if (cancelBtn) cancelBtn.style.display = 'none';
     const ts = fmtTs(restoredStart);
     div.querySelector('.lbl-start').textContent = `Start: ${ts}`;
     div.querySelector('.lbl-start').style.color = 'var(--green)';
@@ -633,6 +637,8 @@ async function startSession(sess) {
 
   sess.startTime = new Date().toISOString();
   sess.started = true;
+  const cancelBtn = sess.el.querySelector('.btn-cancel-sess');
+  if (cancelBtn) cancelBtn.style.display = 'none';
   const ts = fmtTs(sess.startTime);
   sess.el.querySelector('.lbl-start').textContent = `Start: ${ts}`;
   sess.el.querySelector('.lbl-start').style.color = 'var(--green)';
@@ -643,6 +649,18 @@ async function startSession(sess) {
   await dbSetStart(sess.sid, sess.startTime);
   await saveSession(sess);
   startTick(sess);
+}
+
+async function cancelSession(sess) {
+  if (sess.started) return;
+  if (!confirm(`Cancel this session for Chamber ${sess.chamber}?\n\nThis will discard all unsaved data and clear the session.`)) {
+    return;
+  }
+  await dbDeleteSession(sess.sid);
+  closeSession(sess);
+  showView('view-dashboard');
+  toast(`Session for Chamber ${sess.chamber} cancelled.`);
+  if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
 }
 
 function startTick(sess) {
