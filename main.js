@@ -164,11 +164,22 @@ function refreshMinBar() {
   }
   bar.classList.remove('hidden');
   for (const sess of mins) {
-    const icon = sess.started && !sess.ended ? '▶' : (sess.ended ? '■' : '○');
+    const isRunning = sess.started && !sess.ended;
+    const icon = isRunning ? '▶' : (sess.ended ? '■' : '○');
+    const iconColor = isRunning ? 'var(--green)' : (sess.ended ? 'var(--red)' : 'var(--amber)');
     const elapsed = sess.started ? elapsedStr(sess.startTime, sess.ended ? sess.endTime : null) : '--:--:--';
     const btn = document.createElement('button');
     btn.className = 'min-btn';
-    btn.innerHTML = `${icon}  ${sess.chamber} • ${sess.pn}  <span class="min-timer">${elapsed}</span>`;
+    btn.innerHTML = `
+      <div class="min-btn-left">
+        <span class="min-status-icon" style="color:${iconColor}">${icon}</span>
+        <div class="min-btn-info">
+          <span class="min-chamber-name">Chamber ${sess.chamber}</span>
+          <span class="min-part-name">${sess.pn}</span>
+        </div>
+      </div>
+      <span class="min-timer">${elapsed}</span>
+    `;
     btn.onclick = () => restoreSession(sess);
     area.appendChild(btn);
   }
@@ -182,9 +193,20 @@ setInterval(() => {
   const btns = area.querySelectorAll('.min-btn');
   mins.forEach((sess, i) => {
     if (!btns[i]) return;
-    const icon = sess.started && !sess.ended ? '▶' : (sess.ended ? '■' : '○');
+    const isRunning = sess.started && !sess.ended;
+    const icon = isRunning ? '▶' : (sess.ended ? '■' : '○');
+    const iconColor = isRunning ? 'var(--green)' : (sess.ended ? 'var(--red)' : 'var(--amber)');
     const elapsed = sess.started ? elapsedStr(sess.startTime, sess.ended ? sess.endTime : null) : '--:--:--';
-    btns[i].innerHTML = `${icon}  ${sess.chamber} • ${sess.pn}  <span class="min-timer">${elapsed}</span>`;
+    btns[i].innerHTML = `
+      <div class="min-btn-left">
+        <span class="min-status-icon" style="color:${iconColor}">${icon}</span>
+        <div class="min-btn-info">
+          <span class="min-chamber-name">Chamber ${sess.chamber}</span>
+          <span class="min-part-name">${sess.pn}</span>
+        </div>
+      </div>
+      <span class="min-timer">${elapsed}</span>
+    `;
   });
 }, 1000);
 

@@ -218,40 +218,54 @@ button:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 50px 20px 40px;
+  padding: 30px 20px 20px;
   animation: fadeIn .5s ease;
 }
-.welcome-icon { font-size: 4.5rem; opacity: .6; }
-.welcome-title { font-size: 1.4rem; margin: 10px 0 4px; font-weight: 700; }
+.welcome-icon { font-size: 4rem; opacity: .6; }
+.welcome-title { font-size: 1.3rem; margin: 10px 0 4px; font-weight: 700; }
 .welcome-hint { color: var(--muted); font-size: .88rem; }
+
+/* ── Dashboard Stats Bar ──────────────────────────────────────────────── */
+.dashboard-stats-wrap {
+  padding: 16px 24px 8px;
+  display: flex;
+  justify-content: center;
+}
 .stats-cards {
   display: flex;
-  gap: 16px;
-  margin-top: 28px;
+  gap: 20px;
   flex-wrap: wrap;
   justify-content: center;
 }
 .stat-card {
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 22px 36px;
+  padding: 14px 32px;
   text-align: center;
   border: 1px solid var(--border);
-  min-width: 140px;
+  min-width: 160px;
   transition: transform var(--transition), box-shadow var(--transition);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 .stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.35);
 }
 .stat-val {
   font-size: 2.2rem;
   font-weight: 800;
+  line-height: 1.1;
 }
 .stat-lbl {
-  font-size: .78rem;
+  font-size: .8rem;
+  font-weight: 600;
   color: var(--muted);
   margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
 }
 
 /* ── View Header ──────────────────────────────────────────────────────── */
@@ -771,37 +785,90 @@ select.modal-input { cursor: pointer; }
 .result-btn.r-fail    { background: var(--red);    color: #fff; }
 .result-btn.r-aborted { background: var(--amber);  color: #fff; }
 
-/* ── Minimised bar ────────────────────────────────────────────────────── */
+/* ── Minimized bar ────────────────────────────────────────────────────── */
 #minimized-bar {
   display: flex;
+  flex-direction: column;
   align-items: center;
   background: var(--header);
-  padding: 6px 12px;
-  gap: 8px;
-  flex-wrap: wrap;
+  padding: 16px 24px 20px;
+  gap: 12px;
   border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 #minimized-bar.hidden { display: none; }
-.min-bar-label { font-size: .78rem; color: var(--muted); }
+.min-bar-label {
+  font-size: .88rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+}
+#minimized-btn-area {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
 .min-btn {
   background: var(--surface);
   color: #fff;
   border: 1px solid var(--border);
-  padding: 10px 20px;
-  border-radius: var(--radius-sm);
-  font-size: 1rem;
-  font-weight: 600;
-  min-width: 220px;
+  padding: 16px 24px;
+  border-radius: var(--radius);
+  min-width: 330px;
+  min-height: 78px;
   cursor: pointer;
   transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.3);
+}
+.min-btn-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+}
+.min-status-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.min-btn-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.min-chamber-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -.2px;
+}
+.min-part-name {
+  font-size: .88rem;
+  font-weight: 500;
+  color: var(--muted);
 }
 .min-btn .min-timer {
-  color: #4ea8ff;
-  font-weight: 500;
+  color: #58a6ff;
+  font-size: 1.25rem;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-weight: 700;
+  background: rgba(31,111,235,0.16);
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(88,166,255,0.3);
+  white-space: nowrap;
 }
 .min-btn:hover {
-  background: var(--accent);
+  background: #1c2331;
   border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(31,111,235,0.35);
 }
 
 /* ── Toast Notification ───────────────────────────────────────────────── */
