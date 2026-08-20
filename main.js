@@ -157,7 +157,7 @@ function refreshMinBar() {
   const bar = $('#minimized-bar');
   const area = $('#minimized-btn-area');
   area.innerHTML = '';
-  const mins = activeSessions.filter(s => s.minimized);
+  const mins = activeSessions.filter(s => s.minimized && (s.chamber || s.pn));
   if (mins.length === 0) {
     bar.classList.add('hidden');
     return;
@@ -178,7 +178,7 @@ function refreshMinBar() {
 setInterval(() => {
   const area = $('#minimized-btn-area');
   if (!area) return;
-  const mins = activeSessions.filter(s => s.minimized);
+  const mins = activeSessions.filter(s => s.minimized && (s.chamber || s.pn));
   const btns = area.querySelectorAll('.min-btn');
   mins.forEach((sess, i) => {
     if (!btns[i]) return;
@@ -2011,11 +2011,19 @@ function renderMatrix() {
    Session Restore
    ═══════════════════════════════════════════════════════════════════════════ */
 async function restoreOpenSessions() {
+  // Purge any in-memory sessions that have no chamber/part number
+  for (const sess of [...activeSessions]) {
+    if (!sess.chamber && !sess.pn) {
+      closeSession(sess);
+    }
+  }
+
   const openSessions = await dbGetOpenSessions();
   if (!openSessions.length) return;
 
   let restored = 0;
   for (const s of openSessions) {
+    if (!s.chamber && !s.part_number && !s.operator) continue;
     // Don't re-restore sessions that are already active (by ID, chamber, or station)
     if (activeSessions.some(a => a.sid === s.id)) continue;
     if (activeSessions.some(a => a.chamber === s.chamber)) {
@@ -2073,7 +2081,10 @@ async function restoreOpenSessions() {
 async function refreshActiveSessions() {
   for (const sess of [...activeSessions]) {
     const dbSess = await db.sessions.get(sess.sid);
-    if (!dbSess) continue;
+    if (!dbSess || (!dbSess.chamber && !dbSess.part_number && !dbSess.operator)) {
+      closeSession(sess);
+      continue;
+    }
 
     // Session was started on another device
     if (!sess.started && dbSess.start_time) {

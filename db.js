@@ -130,7 +130,8 @@ export async function dbSaveEntries(sid, rows) {
 }
 
 export async function dbAllSessions() {
-  return (await db.sessions.orderBy('id').reverse().toArray());
+  const all = await db.sessions.orderBy('id').reverse().toArray();
+  return all.filter(s => Boolean(s.chamber || s.part_number || s.operator));
 }
 
 export async function dbSessionEntries(sid) {
@@ -269,10 +270,11 @@ export async function dbAllTests() {
 }
 
 export async function dbGetOpenSessions() {
-  // Return all sessions that haven't been ended, regardless of device.
-  // This shows all active sessions across all machines in the minimized bar.
+  // Return all valid sessions that haven't been ended, regardless of device.
+  // Must have identifying data (not deleted/blanked).
   return db.sessions.filter(s => {
-    return s.end_time === null || s.end_time === '';
+    const hasData = Boolean(s.chamber || s.part_number || s.operator);
+    return hasData && (s.end_time === null || s.end_time === '');
   }).toArray();
 }
 
