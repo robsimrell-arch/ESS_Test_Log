@@ -303,6 +303,141 @@ button:disabled {
   border-color: rgba(88,166,255,0.35);
 }
 
+/* ── Awaiting Mini Test Modal Sizing & Layout ─────────────────────────── */
+#modal-awaiting-mini {
+  width: min(1320px, 96vw);
+  max-width: 96vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#modal-awaiting-mini .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+#modal-awaiting-mini .modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+#modal-awaiting-mini .modal-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color var(--transition), background var(--transition);
+}
+
+#modal-awaiting-mini .modal-close:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.08);
+}
+
+#modal-awaiting-mini .modal-body {
+  padding: 18px 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+#modal-awaiting-mini .table-wrap-scroll {
+  max-height: calc(85vh - 210px);
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+#awaiting-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1080px;
+}
+
+#awaiting-table th {
+  position: sticky;
+  top: 0;
+  background: var(--header);
+  z-index: 3;
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+#awaiting-table td {
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  vertical-align: middle;
+}
+
+#awaiting-table tr:hover td {
+  background: rgba(255,255,255,0.03);
+}
+
+#awaiting-table td:nth-child(1) { /* UUT Serial */
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+#awaiting-table td:nth-child(2) { /* Part Number */
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+#awaiting-table td:nth-child(3) { /* Failed Date */
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+#awaiting-table td:nth-child(4) { /* Chamber / Station */
+  white-space: nowrap;
+  color: var(--text);
+}
+
+#awaiting-table td:nth-child(5) { /* Failure Notes */
+  min-width: 240px;
+  max-width: 400px;
+  white-space: normal;
+  word-break: break-word;
+  color: #e6edf3;
+  line-height: 1.4;
+}
+
+#awaiting-table td:nth-child(6) { /* Mini Tests Used */
+  white-space: nowrap;
+  text-align: center;
+}
+
+#awaiting-table td:nth-child(7) { /* Action */
+  white-space: nowrap;
+  text-align: center;
+  width: 140px;
+}
+
 /* ── View Header ──────────────────────────────────────────────────────── */
 .view-header {
   display: flex;
