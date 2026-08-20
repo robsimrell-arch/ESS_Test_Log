@@ -1893,6 +1893,77 @@ function exportSearchResults() {
    Awaiting Mini Test Modal
    ═══════════════════════════════════════════════════════════════════════════ */
 let _awaitingMiniList = [];
+let awaitingSortKey = 'failed_date';
+let awaitingSortRev = true; // default: newest failure first
+
+const AWAITING_COLS = [
+  { key: 'uut_serial',    label: 'UUT Serial Number' },
+  { key: 'part_number',   label: 'Part Number' },
+  { key: 'failed_date',   label: 'Failed Full Test Date' },
+  { key: 'chamber',       label: 'Chamber / Station' },
+  { key: 'failure_notes', label: 'Failure Notes' },
+  { key: 'mini_count',    label: 'Mini Tests Used' },
+];
+
+function buildAwaitingHead() {
+  const thead = $('#awaiting-table thead');
+  if (!thead) return;
+  thead.innerHTML = '';
+
+  const tr = document.createElement('tr');
+  for (const col of AWAITING_COLS) {
+    const th = document.createElement('th');
+    th.className = 'sortable';
+    th.dataset.key = col.key;
+    let arrow = '';
+    if (awaitingSortKey === col.key) {
+      arrow = awaitingSortRev ? ' ▼' : ' ▲';
+    }
+    th.textContent = col.label + arrow;
+    th.addEventListener('click', () => {
+      if (awaitingSortKey === col.key) {
+        awaitingSortRev = !awaitingSortRev;
+      } else {
+        awaitingSortKey = col.key;
+        awaitingSortRev = false;
+      }
+      buildAwaitingHead();
+      filterAwaitingModal();
+    });
+    tr.appendChild(th);
+  }
+
+  // Non-sortable action column
+  const actionTh = document.createElement('th');
+  actionTh.style.textAlign = 'center';
+  actionTh.textContent = 'Action';
+  tr.appendChild(actionTh);
+
+  thead.appendChild(tr);
+}
+
+function sortAwaitingList(list) {
+  return [...list].sort((a, b) => {
+    let vA = a[awaitingSortKey];
+    let vB = b[awaitingSortKey];
+
+    if (awaitingSortKey === 'mini_count') {
+      const diff = (vA || 0) - (vB || 0);
+      return awaitingSortRev ? -diff : diff;
+    }
+
+    if (awaitingSortKey === 'chamber') {
+      vA = `${a.chamber || ''} ${a.station || ''}`;
+      vB = `${b.chamber || ''} ${b.station || ''}`;
+    }
+
+    vA = String(vA || '').toLowerCase();
+    vB = String(vB || '').toLowerCase();
+
+    const cmp = vA.localeCompare(vB);
+    return awaitingSortRev ? -cmp : cmp;
+  });
+}
 
 async function openAwaitingMiniModal() {
   _awaitingMiniList = await getAwaitingMiniTestUuts();
@@ -1905,7 +1976,8 @@ async function openAwaitingMiniModal() {
   if (searchInput) searchInput.value = '';
   if (badge) badge.textContent = `${_awaitingMiniList.length} UUT${_awaitingMiniList.length === 1 ? '' : 's'}`;
 
-  renderAwaitingTable(_awaitingMiniList);
+  buildAwaitingHead();
+  filterAwaitingModal();
 
   $$('.modal').forEach(m => m.style.display = 'none');
   modal.style.display = '';
@@ -1954,18 +2026,18 @@ function renderAwaitingTable(list) {
 
 function filterAwaitingModal() {
   const q = ($('#awaiting-search-input')?.value || '').trim().toLowerCase();
-  if (!q) {
-    renderAwaitingTable(_awaitingMiniList);
-    return;
+  let list = _awaitingMiniList;
+  if (q) {
+    list = _awaitingMiniList.filter(r =>
+      r.uut_serial.toLowerCase().includes(q) ||
+      (r.part_number && r.part_number.toLowerCase().includes(q)) ||
+      (r.chamber && r.chamber.toLowerCase().includes(q)) ||
+      (r.station && r.station.toLowerCase().includes(q)) ||
+      (r.failure_notes && r.failure_notes.toLowerCase().includes(q))
+    );
   }
-  const filtered = _awaitingMiniList.filter(r =>
-    r.uut_serial.toLowerCase().includes(q) ||
-    (r.part_number && r.part_number.toLowerCase().includes(q)) ||
-    (r.chamber && r.chamber.toLowerCase().includes(q)) ||
-    (r.station && r.station.toLowerCase().includes(q)) ||
-    (r.failure_notes && r.failure_notes.toLowerCase().includes(q))
-  );
-  renderAwaitingTable(filtered);
+  const sorted = sortAwaitingList(list);
+  renderAwaitingTable(sorted);
 }
 
 function exportAwaitingCSV() {
@@ -1973,8 +2045,9 @@ function exportAwaitingCSV() {
     toast('No awaiting UUTs to export.', true);
     return;
   }
+  const sorted = sortAwaitingList(_awaitingMiniList);
   let csv = 'UUT Serial Number,Part Number,Failed Full Test Date,Chamber,Station,Failure Notes,Mini Tests Done,Max Mini Tests\n';
-  for (const r of _awaitingMiniList) {
+  for (const r of sorted) {
     csv += `"${r.uut_serial}","${r.part_number||''}","${fmtTs(r.failed_date)}","${r.chamber||''}","${r.station||''}","${(r.failure_notes||'').replace(/"/g, '""')}",${r.mini_count},${r.max_mini}\n`;
   }
   const dateStr = new Date().toISOString().slice(0, 10);
