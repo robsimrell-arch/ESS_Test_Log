@@ -212,16 +212,45 @@ async function pushConfig() {
 
 /* ── Pull: Supabase → Local ──────────────────────────────────────────── */
 
-async function pullSessions() {
-  const { data, error } = await supabase
-    .from('sessions')
-    .select('*')
-    .order('updated_at', { ascending: false });
+/**
+ * Fetch all rows from a Supabase table using pagination (bypasses Supabase 1,000 row limit).
+ */
+async function fetchAllSupabaseRows(table, orderBy = 'updated_at') {
+  const PAGE_SIZE = 1000;
+  let allRows = [];
+  let from = 0;
+  let hasMore = true;
 
-  if (error) {
-    console.error('[Sync] Pull sessions error:', error.message);
-    return 0;
+  while (hasMore) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .order(orderBy, { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.error(`[Sync] Error fetching ${table} (range ${from}-${to}):`, error.message);
+      break;
+    }
+
+    if (data && data.length) {
+      allRows.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    } else {
+      hasMore = false;
+    }
   }
+
+  return allRows;
+}
+
+async function pullSessions() {
+  const data = await fetchAllSupabaseRows('sessions');
   if (!data || !data.length) return 0;
 
   // Build a map of existing local sessions by UUID
@@ -281,15 +310,7 @@ async function pullSessions() {
 }
 
 async function pullEntries() {
-  const { data, error } = await supabase
-    .from('uut_entries')
-    .select('*')
-    .order('updated_at', { ascending: false });
-
-  if (error) {
-    console.error('[Sync] Pull entries error:', error.message);
-    return 0;
-  }
+  const data = await fetchAllSupabaseRows('uut_entries');
   if (!data || !data.length) return 0;
 
   // Build maps
