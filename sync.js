@@ -143,12 +143,10 @@ async function pushEntries() {
 
     const pushTs = new Date().toISOString();
 
-    // RESULT PRESERVATION: if we are about to push an empty result (e.g. from
-    // an auto-save or minimize that ran before the operator entered results),
-    // check whether Supabase already holds a non-empty result for this entry.
-    // If so, keep the remote result rather than overwriting it with ''.
+    // RESULT PRESERVATION: Only if this entry has a valid UUT serial (is NOT an intentional blanking/deletion),
+    // and its local result is empty, check if Supabase has a non-empty result to preserve.
     let resolvedResult = e.result || '';
-    if (!resolvedResult) {
+    if (!resolvedResult && e.uut_serial && e.uut_serial.trim()) {
       const { data: remoteEntry } = await supabase
         .from('uut_entries')
         .select('result')
@@ -322,22 +320,21 @@ async function pullEntries() {
         : 0;
 
       if (remoteTs > localTs) {
-        // RESULT PRESERVATION: never let an empty remote result overwrite a
-        // non-empty local result. This prevents a save-before-results (which
-        // pushed empty results to Supabase) from later clobbering results that
-        // the operator entered before ending the session.
-        const resolvedResult = (!remote.result && existing.result)
-          ? existing.result
-          : remote.result;
+        // If remote is newer (remoteTs > localTs), remote state is authoritative.
+        // When a record is deleted/purged remotely (empty uut_serial), wipe local fields.
+        const isRemoteBlanked = !remote.uut_serial || !remote.uut_serial.trim();
+        const resolvedResult = (isRemoteBlanked || remote.result)
+          ? (remote.result || '')
+          : (existing.result || '');
 
         await db.uut_entries.update(existing.id, {
           session_id:    localSessionId,
           channel:       remote.channel,
-          uut_serial:    remote.uut_serial  || existing.uut_serial  || '',
-          cable_serial:  remote.cable_serial || existing.cable_serial || '',
-          backplane:     remote.backplane    || existing.backplane    || '',
-          notes:         remote.notes        !== undefined ? remote.notes        : (existing.notes        || ''),
-          failure_notes: remote.failure_notes !== undefined ? remote.failure_notes : (existing.failure_notes || ''),
+          uut_serial:    remote.uut_serial || '',
+          cable_serial:  remote.cable_serial || '',
+          backplane:     remote.backplane || '',
+          notes:         remote.notes !== undefined ? remote.notes : '',
+          failure_notes: remote.failure_notes !== undefined ? remote.failure_notes : '',
           result:        resolvedResult,
           sync_status:   'synced',
           updated_at:    remote.updated_at,
