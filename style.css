@@ -270,21 +270,34 @@ button:disabled {
 .stat-card.clickable {
   cursor: pointer;
   position: relative;
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
 .stat-card.clickable:hover {
-  border-color: var(--amber);
+  border-color: var(--accent);
   transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.stat-card.clickable.card-amber:hover {
+  border-color: var(--amber);
   box-shadow: 0 8px 24px rgba(210,153,34,0.3);
+}
+.stat-card.clickable.card-blue:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(88,166,255,0.3);
 }
 .stat-card.clickable:active {
   transform: translateY(-1px);
 }
 .stat-card-hint {
   font-size: .68rem;
-  color: var(--amber);
+  color: var(--muted);
   margin-top: 4px;
   font-weight: 600;
   letter-spacing: .3px;
+  transition: color var(--transition);
+}
+.stat-card.clickable:hover .stat-card-hint {
+  color: var(--text);
 }
 
 .mini-usage-badge {

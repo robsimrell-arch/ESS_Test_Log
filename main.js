@@ -142,21 +142,44 @@ async function refreshStats() {
   if (!cards) return;
   cards.innerHTML = '';
   const data = [
-    { val: totalSessions, lbl: 'Total Sessions', color: 'var(--accent)', clickable: false },
-    { val: activeSessions.length, lbl: 'Active Sessions', color: 'var(--green)', clickable: false },
-    { val: awaitingList.length, lbl: 'Awaiting Mini Test', color: 'var(--amber)', clickable: true, hint: 'Click to view' },
+    {
+      val: totalSessions,
+      lbl: 'Total Sessions',
+      color: 'var(--accent)',
+      clickable: true,
+      cardClass: 'card-blue',
+      hint: 'View History',
+      onClick: () => loadHistory(),
+      title: 'Click to open Session History',
+    },
+    {
+      val: activeSessions.length,
+      lbl: 'Active Sessions',
+      color: 'var(--green)',
+      clickable: false,
+    },
+    {
+      val: awaitingList.length,
+      lbl: 'Awaiting Mini Test',
+      color: 'var(--amber)',
+      clickable: true,
+      cardClass: 'card-amber',
+      hint: 'Click to view',
+      onClick: () => openAwaitingMiniModal(),
+      title: 'Click to view UUTs awaiting mini test',
+    },
   ];
   for (const d of data) {
     const card = document.createElement('div');
-    card.className = 'stat-card' + (d.clickable ? ' clickable' : '');
+    card.className = 'stat-card' + (d.clickable ? ` clickable ${d.cardClass || ''}` : '');
     card.innerHTML = `
       <div class="stat-val" style="color:${d.color}">${d.val}</div>
       <div class="stat-lbl">${d.lbl}</div>
       ${d.hint ? `<div class="stat-card-hint">${d.hint} ↗</div>` : ''}
     `;
-    if (d.clickable) {
-      card.title = 'Click to view UUTs awaiting mini test';
-      card.addEventListener('click', () => openAwaitingMiniModal());
+    if (d.clickable && d.onClick) {
+      if (d.title) card.title = d.title;
+      card.addEventListener('click', d.onClick);
     }
     cards.appendChild(card);
   }
