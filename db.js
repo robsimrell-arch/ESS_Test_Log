@@ -423,6 +423,9 @@ export async function getAwaitingMiniTestUuts() {
     if (!isCompleted) continue;
 
     const serialTrimmed = e.uut_serial.trim();
+    // Exclude any serial numbers that do not begin with "BH" (case-insensitive)
+    if (!serialTrimmed.toLowerCase().startsWith('bh')) continue;
+
     const lc = serialTrimmed.toLowerCase();
     if (!uutMap.has(lc)) {
       uutMap.set(lc, { serial: serialTrimmed, runs: [] });
