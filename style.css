@@ -285,6 +285,10 @@ button:disabled {
   border-color: var(--accent);
   box-shadow: 0 8px 24px rgba(88,166,255,0.3);
 }
+.stat-card.clickable.card-purple:hover {
+  border-color: #a371f7;
+  box-shadow: 0 8px 24px rgba(163,113,247,0.3);
+}
 .stat-card.clickable:active {
   transform: translateY(-1px);
 }

@@ -122,6 +122,8 @@ function downloadJSON(filename, obj) {
    ═══════════════════════════════════════════════════════════════════════════ */
 async function refreshStats() {
   const totalSessions = (await dbAllSessions()).length;
+  const allTests = await dbAllTests();
+  const totalTests = allTests.length;
   const awaitingList = await getAwaitingMiniTestUuts();
 
   const welcomeTitle = $('#welcome-title');
@@ -143,6 +145,12 @@ async function refreshStats() {
   cards.innerHTML = '';
   const data = [
     {
+      val: activeSessions.length,
+      lbl: 'Active Sessions',
+      color: 'var(--green)',
+      clickable: false,
+    },
+    {
       val: totalSessions,
       lbl: 'Total Sessions',
       color: 'var(--accent)',
@@ -153,10 +161,14 @@ async function refreshStats() {
       title: 'Click to open Session History',
     },
     {
-      val: activeSessions.length,
-      lbl: 'Active Sessions',
-      color: 'var(--green)',
-      clickable: false,
+      val: totalTests,
+      lbl: 'UUT History',
+      color: '#a371f7',
+      clickable: true,
+      cardClass: 'card-purple',
+      hint: 'View History',
+      onClick: () => loadAllTests(),
+      title: 'Click to open UUT History',
     },
     {
       val: awaitingList.length,
@@ -2881,13 +2893,20 @@ function bindEquipHealthTabs() {
 function bindEvents() {
   // Nav
   const goHome = () => { showView('view-dashboard'); refreshStats(); };
-  $('#btn-dashboard').addEventListener('click', goHome);
-  $('#btn-home').addEventListener('click', goHome);
-  $('#btn-new-session').addEventListener('click', openNewSessionModal);
-  $('#btn-history').addEventListener('click', loadHistory);
-  $('#btn-all-tests').addEventListener('click', loadAllTests);
-  $('#btn-equip-health').addEventListener('click', loadEquipHealth);
-  $('#btn-settings').addEventListener('click', loadSettingsView);
+  const btnDash = $('#btn-dashboard');
+  if (btnDash) btnDash.addEventListener('click', goHome);
+  const btnHome = $('#btn-home');
+  if (btnHome) btnHome.addEventListener('click', goHome);
+  const btnNewSess = $('#btn-new-session');
+  if (btnNewSess) btnNewSess.addEventListener('click', openNewSessionModal);
+  const btnHist = $('#btn-history');
+  if (btnHist) btnHist.addEventListener('click', loadHistory);
+  const btnAll = $('#btn-all-tests');
+  if (btnAll) btnAll.addEventListener('click', loadAllTests);
+  const btnEquip = $('#btn-equip-health');
+  if (btnEquip) btnEquip.addEventListener('click', loadEquipHealth);
+  const btnSet = $('#btn-settings');
+  if (btnSet) btnSet.addEventListener('click', loadSettingsView);
 
   // Equipment Health filters
   bindEquipHealthTabs();
