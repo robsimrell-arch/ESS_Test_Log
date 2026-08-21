@@ -282,6 +282,16 @@
             <button class="btn-add" id="matrix-add-btn">+ Add Rule</button>
           </div>
         </div>
+
+        <!-- ── Database Maintenance & Cleanup ────────────────────── -->
+        <div class="setting-group" id="db-cleanup-group">
+          <h3>🧹 Database Maintenance & Cleanup</h3>
+          <p class="matrix-hint">Purge legacy test logs (created before April 11, 2026) and test records with serial numbers that do not begin with "BH". You will be able to review all flagged records before confirming.</p>
+          <div style="margin-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn-primary" id="btn-purge-review-open" style="background:var(--red);border-color:var(--red);">🔍 Review & Purge Flagged Records</button>
+            <span id="purge-summary-label" style="font-size:0.85rem;color:var(--muted);">Review flagged records before deletion</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -602,6 +612,56 @@
       </div>
       <div class="modal-actions">
         <button class="btn-primary" id="awaiting-close-btn">Close</button>
+      </div>
+    </div>
+
+    <!-- ── Modal: Purge & Cleanup Review ───────────────────── -->
+    <div class="modal" id="modal-purge-review" style="display:none;width:min(1280px,96vw);max-width:96vw;max-height:90vh;">
+      <div class="modal-header modal-header-red" style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;text-align:left;">
+        <div>
+          <h2 style="margin:0;font-size:1.25rem;">🧹 Database Cleanup Review</h2>
+          <p class="modal-sub" style="color:rgba(255,255,255,0.85);margin-top:2px;">Review all records flagged for deletion before confirming</p>
+        </div>
+        <button class="modal-close" id="purge-review-close" style="background:transparent;border:none;color:#fff;font-size:1.3rem;cursor:pointer;">✕</button>
+      </div>
+      <div class="modal-body" style="padding:18px 24px;display:flex;flex-direction:column;gap:12px;">
+        <div style="background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);border-radius:6px;padding:12px 16px;font-size:0.88rem;line-height:1.5;">
+          <strong>Purge Criteria:</strong> Any UUT test record logged <strong>before 4/11/2026</strong> OR with a Serial Number that does <strong>not begin with "BH"</strong>. Sessions created before 4/11/2026 or left with 0 valid UUTs will also be removed.
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <input type="text" id="purge-review-search" class="modal-input" placeholder="🔍 Filter flagged records..." style="max-width:340px;" />
+          <div id="purge-count-badge" style="font-size:0.9rem;font-weight:700;color:var(--red);">Scanning database...</div>
+        </div>
+
+        <div class="table-wrap-scroll" style="max-height:calc(65vh - 160px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);">
+          <table class="data-table" id="purge-review-table" style="width:100%;min-width:980px;">
+            <thead>
+              <tr>
+                <th>Flag Reason</th>
+                <th>UUT Serial Number</th>
+                <th>Part Number</th>
+                <th>Session Date</th>
+                <th>Chamber / Station</th>
+                <th>Result</th>
+                <th>Failure Notes</th>
+              </tr>
+            </thead>
+            <tbody id="purge-review-tbody"></tbody>
+          </table>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:6px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
+          <div style="flex:1;min-width:260px;max-width:380px;">
+            <label style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:4px;">Authorization Password (Required)</label>
+            <input type="password" id="purge-auth-pw" class="modal-input" placeholder="Enter password to confirm purge…" autocomplete="new-password" />
+            <div id="purge-auth-error" style="display:none;color:var(--red);font-size:0.85rem;margin-top:4px;">❌ Incorrect password. Please try again.</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-end;">
+            <button class="btn-ghost" id="purge-review-cancel">Cancel</button>
+            <button class="btn-danger" id="purge-review-confirm" style="padding:10px 20px;font-weight:700;">🗑️ Confirm & Purge Flagged Records</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

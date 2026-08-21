@@ -582,6 +582,142 @@ export async function dbImportAll(data, mode = 'merge') {
   return { sessions: sessCount, entries: entryCount };
 }
 
+/* ── Database Maintenance / Purge ─────────────────────────────────────── */
+
+/**
+ * Scans the database for records that match the purge criteria:
+ * - Session date before 2026-04-11 (DATA_CUTOFF_MS), OR
+ * - UUT Serial Number that does not begin with "BH" (case-insensitive)
+ *
+ * @returns {Promise<{
+ *   purgeEntries: Array<object>,
+ *   purgeSessions: Array<object>,
+ *   totalEntries: number,
+ *   totalSessions: number,
+ * }>}
+ */
+export async function dbPreviewPurge() {
+  const sessions = await db.sessions.toArray();
+  const sMap = Object.fromEntries(sessions.map(s => [s.id, s]));
+  const entries = await db.uut_entries.toArray();
+
+  const totalEntries = entries.filter(e => e.uut_serial).length;
+  const totalSessions = sessions.filter(s => s.chamber || s.part_number).length;
+
+  const purgeEntries = [];
+  const sessionRemainingEntries = new Map(); // sid -> remaining valid UUT count
+
+  for (const e of entries) {
+    if (!e.uut_serial) continue;
+    const s = sMap[e.session_id];
+    const sid = e.session_id;
+    const sessionTime = s ? (s.start_time || s.end_time || s.created_at) : null;
+    const isPreCutoff = sessionTime ? (new Date(sessionTime).getTime() < DATA_CUTOFF_MS) : false;
+    const isNonBH = !e.uut_serial.trim().toLowerCase().startsWith('bh');
+
+    if (isPreCutoff || isNonBH) {
+      const reasons = [];
+      if (isPreCutoff) reasons.push('Before 4/11/2026');
+      if (isNonBH) reasons.push('Non-BH Serial');
+
+      purgeEntries.push({
+        id: e.id,
+        sid: e.session_id,
+        channel: e.channel,
+        uut_serial: e.uut_serial,
+        part_number: s ? s.part_number : '—',
+        chamber: s ? s.chamber : '—',
+        station: s ? s.station : '—',
+        start_time: sessionTime || '',
+        result: e.result || '—',
+        failure_notes: e.failure_notes || '',
+        notes: e.notes || '',
+        reasons,
+      });
+    } else {
+      sessionRemainingEntries.set(sid, (sessionRemainingEntries.get(sid) || 0) + 1);
+    }
+  }
+
+  // Sessions to purge: either created before cutoff, or will have 0 valid UUT entries remaining
+  const purgeSessions = [];
+  for (const s of sessions) {
+    if (!s.chamber && !s.part_number) continue; // already blanked
+    const sessionTime = s.start_time || s.end_time || s.created_at;
+    const isPreCutoff = sessionTime ? (new Date(sessionTime).getTime() < DATA_CUTOFF_MS) : false;
+    const remainingCount = sessionRemainingEntries.get(s.id) || 0;
+
+    if (isPreCutoff || remainingCount === 0) {
+      const reasons = [];
+      if (isPreCutoff) reasons.push('Before 4/11/2026');
+      if (remainingCount === 0) reasons.push('No valid UUTs remaining');
+
+      purgeSessions.push({
+        id: s.id,
+        chamber: s.chamber,
+        station: s.station,
+        part_number: s.part_number,
+        operator: s.operator,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        reasons,
+      });
+    }
+  }
+
+  return {
+    purgeEntries: purgeEntries.sort((a, b) => (b.start_time || '').localeCompare(a.start_time || '')),
+    purgeSessions,
+    totalEntries,
+    totalSessions,
+  };
+}
+
+/**
+ * Execute the database purge for flagged entries and sessions.
+ * Blanks all matching records and marks them with sync_status: 'pending' so
+ * the changes are automatically propagated to Supabase.
+ */
+export async function dbExecutePurge() {
+  const { purgeEntries, purgeSessions } = await dbPreviewPurge();
+  const now = new Date().toISOString();
+
+  // 1. Blank flagged UUT entries
+  for (const e of purgeEntries) {
+    await db.uut_entries.update(e.id, {
+      uut_serial: '',
+      cable_serial: '',
+      backplane: '',
+      notes: '',
+      failure_notes: '',
+      result: '',
+      sync_status: 'pending',
+      updated_at: now,
+    });
+  }
+
+  // 2. Blank flagged sessions
+  for (const s of purgeSessions) {
+    await db.sessions.update(s.id, {
+      operator: '',
+      chamber: '',
+      station: '',
+      part_number: '',
+      test_type: '',
+      start_time: null,
+      end_time: null,
+      closed_by: '',
+      sync_status: 'pending',
+      updated_at: now,
+    });
+  }
+
+  return {
+    purgedEntriesCount: purgeEntries.length,
+    purgedSessionsCount: purgeSessions.length,
+  };
+}
+
 /* ── Utility ──────────────────────────────────────────────────────────── */
 export function fmtTs(iso) {
   if (!iso) return '—';

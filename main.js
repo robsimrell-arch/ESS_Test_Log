@@ -13,6 +13,7 @@ import db, {
   dbExportAll, dbImportAll,
   dbDeleteUutEntry, dbDeleteSession, dbUpdateUutEntry,
   getUutTestCounts, getAwaitingMiniTestUuts,
+  dbPreviewPurge, dbExecutePurge,
   fmtTs,
 } from './db.js';
 import { initSync, syncAll, startAutoSync, onSyncStatus, watchConnectivity, isSyncEnabled } from './sync.js';
@@ -2056,8 +2057,132 @@ function exportAwaitingCSV() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Settings View
+   Database Maintenance & Cleanup Review Modal
    ═══════════════════════════════════════════════════════════════════════════ */
+let _purgePreviewData = null;
+
+async function openPurgeReviewModal() {
+  const modal = $('#modal-purge-review');
+  const overlay = $('#modal-overlay');
+  const badge = $('#purge-count-badge');
+  const pwInput = $('#purge-auth-pw');
+  const errDiv = $('#purge-auth-error');
+  const searchInput = $('#purge-review-search');
+
+  if (pwInput) pwInput.value = '';
+  if (errDiv) errDiv.style.display = 'none';
+  if (searchInput) searchInput.value = '';
+
+  if (badge) badge.textContent = 'Scanning database...';
+  renderPurgeReviewTable([]);
+
+  $$('.modal').forEach(m => m.style.display = 'none');
+  modal.style.display = '';
+  overlay.classList.remove('hidden');
+
+  _purgePreviewData = await dbPreviewPurge();
+
+  const totalFlagged = _purgePreviewData.purgeEntries.length;
+  const sessionsFlagged = _purgePreviewData.purgeSessions.length;
+
+  if (badge) {
+    badge.textContent = `${totalFlagged} UUT entries & ${sessionsFlagged} sessions flagged for purge`;
+  }
+
+  renderPurgeReviewTable(_purgePreviewData.purgeEntries);
+  if (pwInput) setTimeout(() => pwInput.focus(), 100);
+}
+
+function renderPurgeReviewTable(entries) {
+  const tbody = $('#purge-review-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!entries.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:30px;">No records match the purge criteria. Database is clean!</td></tr>`;
+    return;
+  }
+
+  for (const r of entries) {
+    const tr = document.createElement('tr');
+    const reasonsHtml = r.reasons.map(reason =>
+      `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;background:rgba(248,81,73,0.18);color:var(--red);border:1px solid rgba(248,81,73,0.35);margin-right:4px;">${reason}</span>`
+    ).join(' ');
+
+    const resultClass = r.result === 'PASS' ? 'pass' : r.result === 'FAIL' ? 'fail' : r.result === 'ABORTED' ? 'abort' : '';
+
+    tr.innerHTML = `
+      <td>${reasonsHtml}</td>
+      <td><strong style="font-family:'JetBrains Mono',monospace;">${r.uut_serial}</strong></td>
+      <td>${r.part_number || '—'}</td>
+      <td>${fmtTs(r.start_time)}</td>
+      <td>${r.chamber || '—'} / ${r.station || '—'} (Ch ${r.channel})</td>
+      <td class="${resultClass}">${r.result || '—'}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.failure_notes || '').replace(/"/g, '&quot;')}">${r.failure_notes || '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function filterPurgeReview() {
+  if (!_purgePreviewData) return;
+  const q = ($('#purge-review-search')?.value || '').trim().toLowerCase();
+  if (!q) {
+    renderPurgeReviewTable(_purgePreviewData.purgeEntries);
+    return;
+  }
+  const filtered = _purgePreviewData.purgeEntries.filter(r =>
+    r.uut_serial.toLowerCase().includes(q) ||
+    (r.part_number && r.part_number.toLowerCase().includes(q)) ||
+    (r.chamber && r.chamber.toLowerCase().includes(q)) ||
+    (r.station && r.station.toLowerCase().includes(q)) ||
+    (r.failure_notes && r.failure_notes.toLowerCase().includes(q)) ||
+    r.reasons.some(reason => reason.toLowerCase().includes(q))
+  );
+  renderPurgeReviewTable(filtered);
+}
+
+async function confirmPurgeExecution() {
+  const pw = $('#purge-auth-pw').value;
+  if (pw !== 'TEngineer') {
+    $('#purge-auth-error').style.display = '';
+    $('#purge-auth-pw').value = '';
+    $('#purge-auth-pw').focus();
+    return;
+  }
+
+  if (!_purgePreviewData || (!_purgePreviewData.purgeEntries.length && !_purgePreviewData.purgeSessions.length)) {
+    toast('No records to purge.');
+    closeModal();
+    return;
+  }
+
+  const count = _purgePreviewData.purgeEntries.length;
+  const sCount = _purgePreviewData.purgeSessions.length;
+
+  if (!confirm(`Are you sure you want to permanently blank and purge ${count} UUT entries and ${sCount} sessions?\n\nThis will sync to the cloud and cannot be undone.`)) {
+    return;
+  }
+
+  const res = await dbExecutePurge();
+  closeModal();
+
+  // Trigger cloud sync to propagate blanked state to Supabase
+  if (isSyncEnabled()) {
+    await syncAll();
+  }
+
+  // Refresh all views and statistics
+  await refreshStats();
+  if (typeof loadAllTests === 'function') await loadAllTests();
+  if (typeof loadHistoryView === 'function') await loadHistoryView();
+
+  toast(`Successfully purged ${res.purgedEntriesCount} UUT entries and ${res.purgedSessionsCount} sessions.`);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+    Settings View
+    ═══════════════════════════════════════════════════════════════════════════ */
 function loadSettingsView() {
   showView('view-settings');
   renderSettingsLists();
@@ -2823,6 +2948,20 @@ function bindEvents() {
   if (awaitingSearch) awaitingSearch.addEventListener('input', filterAwaitingModal);
   const awaitingExport = $('#awaiting-export-btn');
   if (awaitingExport) awaitingExport.addEventListener('click', exportAwaitingCSV);
+
+  // Database Purge Review modal
+  const btnPurgeOpen = $('#btn-purge-review-open');
+  if (btnPurgeOpen) btnPurgeOpen.addEventListener('click', openPurgeReviewModal);
+  const purgeClose = $('#purge-review-close');
+  if (purgeClose) purgeClose.addEventListener('click', closeModal);
+  const purgeCancel = $('#purge-review-cancel');
+  if (purgeCancel) purgeCancel.addEventListener('click', closeModal);
+  const purgeSearch = $('#purge-review-search');
+  if (purgeSearch) purgeSearch.addEventListener('input', filterPurgeReview);
+  const purgeConfirm = $('#purge-review-confirm');
+  if (purgeConfirm) purgeConfirm.addEventListener('click', confirmPurgeExecution);
+  const purgePwInput = $('#purge-auth-pw');
+  if (purgePwInput) purgePwInput.addEventListener('keydown', e => { if (e.key === 'Enter') confirmPurgeExecution(); });
 
   // Close modal on overlay click (outside modal)
   $('#modal-overlay').addEventListener('click', (e) => {
