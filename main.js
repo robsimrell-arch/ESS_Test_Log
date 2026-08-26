@@ -638,8 +638,15 @@ function getSessionRowData(sess) {
 }
 
 async function saveSession(sess, silent = false, skipSync = false) {
+  if (!sess || sess.cancelled) return;
+  const dbSess = await db.sessions.get(sess.sid);
+  if (!dbSess || (!dbSess.chamber && !dbSess.part_number && !dbSess.operator)) {
+    closeSession(sess);
+    return;
+  }
   // Pull latest from DB into DOM before reading DOM (avoids overwriting with stale tabs)
   await refreshActiveSessions();
+  if (sess.cancelled) return;
   const data = getSessionRowData(sess);
   await dbSaveEntries(sess.sid, data);
   if (!silent) toast('Session saved.');
@@ -725,6 +732,7 @@ async function cancelSession(sess) {
   if (!confirm(`Cancel this session for Chamber ${sess.chamber}?\n\nThis will discard all unsaved data and clear the session.`)) {
     return;
   }
+  sess.cancelled = true;
   await dbDeleteSession(sess.sid);
   closeSession(sess);
   showView('view-dashboard');

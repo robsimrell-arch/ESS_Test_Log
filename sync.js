@@ -68,20 +68,25 @@ async function pushSessions() {
       await db.sessions.update(s.id, { uuid: s.uuid });
     }
 
-    // Fetch existing remote record to merge (don't overwrite non-null with null)
+    // Fetch existing remote record to merge (don't overwrite non-null with null for active sessions)
+    const isBlanked = !s.chamber && !s.part_number && !s.operator;
     let remoteStartTime = null;
     let remoteEndTime = null;
     let remoteClosedBy = '';
-    const { data: existing } = await supabase
-      .from('sessions')
-      .select('start_time, end_time, closed_by')
-      .eq('uuid', s.uuid)
-      .single();
-    if (existing) {
-      remoteStartTime = existing.start_time;
-      remoteEndTime = existing.end_time;
-      remoteClosedBy = existing.closed_by;
+    
+    if (!isBlanked) {
+      const { data: existing } = await supabase
+        .from('sessions')
+        .select('start_time, end_time, closed_by')
+        .eq('uuid', s.uuid)
+        .single();
+      if (existing) {
+        remoteStartTime = existing.start_time;
+        remoteEndTime = existing.end_time;
+        remoteClosedBy = existing.closed_by;
+      }
     }
+
     const pushTs = new Date().toISOString();
     const row = {
       uuid:        s.uuid,
@@ -90,10 +95,10 @@ async function pushSessions() {
       station:     s.station || '',
       part_number: s.part_number || '',
       test_type:   s.test_type || '',
-      start_time:  s.start_time || remoteStartTime || null,
-      end_time:    s.end_time || remoteEndTime || null,
+      start_time:  isBlanked ? null : (s.start_time || remoteStartTime || null),
+      end_time:    isBlanked ? null : (s.end_time || remoteEndTime || null),
       created_at:  s.created_at || '',
-      closed_by:   s.closed_by || remoteClosedBy || '',
+      closed_by:   isBlanked ? '' : (s.closed_by || remoteClosedBy || ''),
       updated_at:  pushTs,
     };
 
@@ -412,10 +417,16 @@ async function pullConfig() {
 /* ── Full Sync ───────────────────────────────────────────────────────── */
 
 let _syncing = false;
+let _syncQueued = false;
 
 export async function syncAll() {
-  if (!syncEnabled || !supabase || _syncing) return;
+  if (!syncEnabled || !supabase) return;
+  if (_syncing) {
+    _syncQueued = true;
+    return;
+  }
   _syncing = true;
+  _syncQueued = false;
   setStatus('syncing', 'Syncing…');
 
   try {
@@ -442,6 +453,10 @@ export async function syncAll() {
     setStatus('offline', 'Sync failed');
   } finally {
     _syncing = false;
+    if (_syncQueued) {
+      _syncQueued = false;
+      setTimeout(() => syncAll(), 50);
+    }
   }
 }
 

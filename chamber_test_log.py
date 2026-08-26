@@ -128,6 +128,14 @@ def db_save_entries(sid, rows):
     conn.commit(); conn.close()
 
 
+def db_delete_session(sid):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM uut_entries WHERE session_id=?", (sid,))
+    c.execute("DELETE FROM sessions WHERE id=?", (sid,))
+    conn.commit(); conn.close()
+
+
 def db_all_sessions():
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute(
@@ -709,6 +717,17 @@ class TestSessionWindow(tk.Toplevel):
         self.focus_set()
 
     def _close(self):
+        if not self.started:
+            if not messagebox.askyesno(
+                    "Discard Session",
+                    "This session has not been started.\nDiscard and cancel this session?",
+                    parent=self):
+                return
+            db_delete_session(self.sid)
+            self._on_close(self)
+            self.destroy()
+            return
+
         if self.started and not self.ended:
             if not messagebox.askyesno(
                     "Close Session",
