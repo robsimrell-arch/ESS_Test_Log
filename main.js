@@ -223,6 +223,18 @@ async function refreshStats() {
   }
 }
 
+function getUutTestingStr(sess) {
+  if (!sess || !sess.rows) return '0 UUTs testing';
+  let count = 0;
+  for (const r of sess.rows) {
+    const input = r.tr ? (r.tr.querySelector('[data-field="uut_serial"]') || r.tr.querySelectorAll('input')[0]) : null;
+    if (input && input.value.trim()) {
+      count++;
+    }
+  }
+  return `${count} ${count === 1 ? 'UUT' : 'UUTs'} testing`;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Minimized Bar
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -249,6 +261,7 @@ function refreshMinBar() {
         <div class="min-btn-info">
           <span class="min-chamber-name">${formatChamberName(sess.chamber)}</span>
           <span class="min-part-name">${sess.pn}</span>
+          <span class="min-uut-count">${getUutTestingStr(sess)}</span>
         </div>
       </div>
       <span class="min-timer">${elapsed}</span>
@@ -276,6 +289,7 @@ setInterval(() => {
         <div class="min-btn-info">
           <span class="min-chamber-name">${formatChamberName(sess.chamber)}</span>
           <span class="min-part-name">${sess.pn}</span>
+          <span class="min-uut-count">${getUutTestingStr(sess)}</span>
         </div>
       </div>
       <span class="min-timer">${elapsed}</span>

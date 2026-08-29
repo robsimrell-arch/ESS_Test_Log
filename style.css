@@ -1040,6 +1040,12 @@ select.modal-input { cursor: pointer; }
   font-weight: 500;
   color: var(--muted);
 }
+.min-uut-count {
+  font-size: .80rem;
+  font-weight: 600;
+  color: #79c0ff;
+  letter-spacing: .2px;
+}
 .min-btn .min-timer {
   color: #58a6ff;
   font-size: 1.25rem;
