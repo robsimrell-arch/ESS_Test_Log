@@ -3131,12 +3131,6 @@ async function init() {
   onSyncStatus(async (status, detail) => {
     updateSyncBanner(status, detail);
 
-    const el = $('#sync-status');
-    if (!el) return;
-    const colors = { online: 'var(--green)', syncing: 'var(--amber)', offline: 'var(--muted)' };
-    const icons  = { online: '☁️', syncing: '🔄', offline: '⚡' };
-    el.style.color = colors[status] || 'var(--muted)';
-    el.innerHTML = `${icons[status] || '☁️'} ${detail}`;
     // After sync completes, refresh everything
     if (status === 'online') {
       // Reload config from DB — but NOT if user is actively editing Settings
@@ -3164,11 +3158,6 @@ async function init() {
     watchConnectivity();
     syncAll(); // sync when the app first opens
   } else {
-    const el = $('#sync-status');
-    if (el) {
-      el.style.color = 'var(--muted)';
-      el.innerHTML = '⚡ Local only';
-    }
     updateSyncBanner('offline', 'Local only');
   }
 }
