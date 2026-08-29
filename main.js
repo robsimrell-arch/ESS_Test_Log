@@ -95,6 +95,32 @@ function elapsedStr(start, end) {
   return `${pad(h)}:${pad(m)}:${pad(secs)}`;
 }
 
+export function formatChamberName(raw) {
+  if (!raw || typeof raw !== 'string') return raw ? String(raw) : '—';
+  const str = raw.trim();
+  if (!str) return '—';
+
+  // Matches "CH-02", "CH02", "CH2", "CH 2", "Chamber-02", "Chamber 2", "Chamber CH2", "Chamber CH-02"
+  const mNum = str.match(/^(?:chamber[\s\-_]*)?(?:ch[\s\-_]*)?0*(\d+)$/i);
+  if (mNum) {
+    return `Chamber ${mNum[1]}`;
+  }
+
+  // Matches "CH-A", "CH A", "Chamber CH-A"
+  const mAlpha = str.match(/^(?:chamber[\s\-_]*)?ch[\s\-_]+([a-z0-9]+)$/i);
+  if (mAlpha) {
+    return `Chamber ${mAlpha[1]}`;
+  }
+
+  // If already starts with "Chamber" (case-insensitive)
+  if (/^chamber\b/i.test(str)) {
+    return str;
+  }
+
+  // Other custom names like "Walk-in" or "Oven B"
+  return str;
+}
+
 function downloadCSV(filename, csvContent) {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
@@ -221,7 +247,7 @@ function refreshMinBar() {
       <div class="min-btn-left">
         <span class="min-status-icon" style="color:${iconColor}">${icon}</span>
         <div class="min-btn-info">
-          <span class="min-chamber-name">Chamber ${sess.chamber}</span>
+          <span class="min-chamber-name">${formatChamberName(sess.chamber)}</span>
           <span class="min-part-name">${sess.pn}</span>
         </div>
       </div>
@@ -248,7 +274,7 @@ setInterval(() => {
       <div class="min-btn-left">
         <span class="min-status-icon" style="color:${iconColor}">${icon}</span>
         <div class="min-btn-info">
-          <span class="min-chamber-name">Chamber ${sess.chamber}</span>
+          <span class="min-chamber-name">${formatChamberName(sess.chamber)}</span>
           <span class="min-part-name">${sess.pn}</span>
         </div>
       </div>
@@ -305,9 +331,9 @@ async function openNewSessionModal() {
       ? [...allowed].sort((a, b) => a.localeCompare(b))
       : allParts;
     if (!parts.length) continue;
-    html += `<optgroup label="${chamber}">`;
+    html += `<optgroup label="${formatChamberName(chamber)}">`;
     for (const part of parts) {
-      html += `<option value="${chamber}||${part}">${part} * ${chamber}</option>`;
+      html += `<option value="${chamber}||${part}">${part} * ${formatChamberName(chamber)}</option>`;
     }
     html += '</optgroup>';
   }
@@ -355,7 +381,7 @@ async function confirmNewSession() {
 
   // Chamber / station conflict check
   if (activeSessions.some(s => s.chamber === ch)) {
-    toast(`Chamber ${ch} is already open in an active session.`, true);
+    toast(`${formatChamberName(ch)} is already open in an active session.`, true);
     return;
   }
   if (activeSessions.some(s => s.station === st)) {
@@ -480,7 +506,7 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
   div.innerHTML = `
     <div class="session-topbar">
       <div style="display:flex;align-items:center;gap:8px">
-        <h2>🏭 Chamber ${chamber}</h2>
+        <h2>🏭 ${formatChamberName(chamber)}</h2>
         <span class="session-meta">Station: ${station} | Part: ${pn} | Type: ${tt} | Operator: ${operator}</span>
       </div>
       <div>
@@ -707,7 +733,7 @@ async function startSession(sess) {
     const otherSerials = new Set(getSessionRowData(other).filter(r => r.uut_serial).map(r => r.uut_serial));
     const dupes = [...mySerials].filter(s => otherSerials.has(s));
     if (dupes.length) {
-      toast(`⚠ UUT serial overlap with Chamber ${other.chamber}: ${dupes.join(', ')}`, true);
+      toast(`⚠ UUT serial overlap with ${formatChamberName(other.chamber)}: ${dupes.join(', ')}`, true);
     }
   }
 
@@ -729,14 +755,14 @@ async function startSession(sess) {
 
 async function cancelSession(sess) {
   if (sess.started) return;
-  if (!confirm(`Cancel this session for Chamber ${sess.chamber}?\n\nThis will discard all unsaved data and clear the session.`)) {
+  if (!confirm(`Cancel this session for ${formatChamberName(sess.chamber)}?\n\nThis will discard all unsaved data and clear the session.`)) {
     return;
   }
   sess.cancelled = true;
   await dbDeleteSession(sess.sid);
   closeSession(sess);
   showView('view-dashboard');
-  toast(`Session for Chamber ${sess.chamber} cancelled.`);
+  toast(`Session for ${formatChamberName(sess.chamber)} cancelled.`);
   if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
 }
 
@@ -805,7 +831,7 @@ async function endSession(sess) {
   
   let validationHtml = `
     <div style="margin-bottom:12px; font-size:0.9rem; color:var(--text);">
-      <div style="font-weight:700; margin-bottom:4px;">Chamber ${sess.chamber} • ${sess.pn}</div>
+      <div style="font-weight:700; margin-bottom:4px;">${formatChamberName(sess.chamber)} • ${sess.pn}</div>
       <div style="color:var(--muted);">Elapsed: ${elapsed} | Station: ${sess.station}</div>
     </div>
     <div class="validation-summary" style="padding:12px; background:rgba(0,0,0,0.2); border-radius:6px; margin-bottom:16px; border:1px solid var(--border);">
@@ -928,7 +954,7 @@ async function endSession(sess) {
 
     closeSession(sess);
     showView('view-dashboard');
-    toast(`Chamber ${closedSession.chamber} session completed. Closed by: ${closingOp}`);
+    toast(`${formatChamberName(closedSession.chamber)} session completed. Closed by: ${closingOp}`);
 
     // Show the print preview so the operator can print or close
     await showReportPreview(closedSession.id, closedSession);
@@ -2046,7 +2072,7 @@ function renderAwaitingTable(list) {
       <td><strong>${r.uut_serial}</strong></td>
       <td>${r.part_number || '—'}</td>
       <td>${fmtTs(r.failed_date)}</td>
-      <td>Chamber ${r.chamber || '—'} / ${r.station || '—'}</td>
+      <td>${formatChamberName(r.chamber)} / ${r.station || '—'}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.failure_notes || '').replace(/"/g, '&quot;')}">${r.failure_notes || '—'}</td>
       <td><span class="${miniBadgeClass}">${r.mini_count} / ${r.max_mini} used</span></td>
       <td style="text-align:center;">
