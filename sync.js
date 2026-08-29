@@ -60,26 +60,27 @@ async function pushSessions() {
 
   if (!pending.length) return 0;
 
-  let pushed = 0;
+  const pushTs = new Date().toISOString();
+  const rows = [];
+  const localUpdates = [];
+
   for (const s of pending) {
-    // Ensure UUID
     if (!s.uuid) {
       s.uuid = newUUID();
       await db.sessions.update(s.id, { uuid: s.uuid });
     }
 
-    // Fetch existing remote record to merge (don't overwrite non-null with null for active sessions)
     const isBlanked = !s.chamber && !s.part_number && !s.operator;
     let remoteStartTime = null;
     let remoteEndTime = null;
     let remoteClosedBy = '';
-    
+
     if (!isBlanked) {
       const { data: existing } = await supabase
         .from('sessions')
         .select('start_time, end_time, closed_by')
         .eq('uuid', s.uuid)
-        .single();
+        .maybeSingle();
       if (existing) {
         remoteStartTime = existing.start_time;
         remoteEndTime = existing.end_time;
@@ -87,7 +88,6 @@ async function pushSessions() {
       }
     }
 
-    const pushTs = new Date().toISOString();
     const row = {
       uuid:        s.uuid,
       operator:    s.operator || '',
@@ -102,26 +102,31 @@ async function pushSessions() {
       updated_at:  pushTs,
     };
 
-    const { error } = await supabase
-      .from('sessions')
-      .upsert(row, { onConflict: 'uuid' });
-
-    if (error) {
-      console.error('[Sync] Push session error:', error.message);
-      continue;
-    }
-
-    // Also update local DB with merged values + matching timestamp
-    await db.sessions.update(s.id, {
+    rows.push(row);
+    localUpdates.push({
+      ...s,
       start_time:  row.start_time,
       end_time:    row.end_time,
       closed_by:   row.closed_by,
       sync_status: 'synced',
       updated_at:  pushTs,
     });
-    pushed++;
   }
-  return pushed;
+
+  if (rows.length) {
+    const { error } = await supabase
+      .from('sessions')
+      .upsert(rows, { onConflict: 'uuid' });
+
+    if (error) {
+      console.error('[Sync] Push sessions error:', error.message);
+      return 0;
+    }
+
+    await db.sessions.bulkPut(localUpdates);
+  }
+
+  return rows.length;
 }
 
 async function pushEntries() {
@@ -131,38 +136,46 @@ async function pushEntries() {
 
   if (!pending.length) return 0;
 
-  let pushed = 0;
+  // Pre-load sessions to resolve session_uuid
+  const sessionIds = [...new Set(pending.map(e => e.session_id))];
+  const sessions = await db.sessions.where('id').anyOf(sessionIds).toArray();
+  const sessionMap = Object.fromEntries(sessions.map(s => [s.id, s]));
+
+  // Check result preservation in batch if any entries have empty result with valid serial
+  const checkResultUuids = pending
+    .filter(e => !e.result && e.uut_serial && e.uut_serial.trim() && e.uuid)
+    .map(e => e.uuid);
+
+  const remoteResultMap = {};
+  if (checkResultUuids.length) {
+    const { data: remoteResults } = await supabase
+      .from('uut_entries')
+      .select('uuid, result')
+      .in('uuid', checkResultUuids);
+
+    if (remoteResults) {
+      for (const r of remoteResults) {
+        if (r.result) remoteResultMap[r.uuid] = r.result;
+      }
+    }
+  }
+
+  const pushTs = new Date().toISOString();
+  const rows = [];
+  const localUpdates = [];
+
   for (const e of pending) {
-    // Ensure UUID
     if (!e.uuid) {
       e.uuid = newUUID();
-      await db.uut_entries.update(e.id, { uuid: e.uuid });
     }
 
-    // We need the session UUID (not local ID) for the foreign key
-    const session = await db.sessions.get(e.session_id);
+    const session = sessionMap[e.session_id];
     if (!session || !session.uuid) {
       console.warn(`[Sync] Skipping entry ${e.id} – session ${e.session_id} has no UUID.`);
       continue;
     }
 
-    const pushTs = new Date().toISOString();
-
-    // RESULT PRESERVATION: Only if this entry has a valid UUT serial (is NOT an intentional blanking/deletion),
-    // and its local result is empty, check if Supabase has a non-empty result to preserve.
-    let resolvedResult = e.result || '';
-    if (!resolvedResult && e.uut_serial && e.uut_serial.trim()) {
-      const { data: remoteEntry } = await supabase
-        .from('uut_entries')
-        .select('result')
-        .eq('uuid', e.uuid)
-        .maybeSingle();
-      if (remoteEntry && remoteEntry.result) {
-        resolvedResult = remoteEntry.result;
-        // Fix local DB so the correct result is persisted and won't loop
-        await db.uut_entries.update(e.id, { result: resolvedResult });
-      }
-    }
+    const resolvedResult = e.result || remoteResultMap[e.uuid] || '';
 
     const row = {
       uuid:          e.uuid,
@@ -177,19 +190,33 @@ async function pushEntries() {
       updated_at:    pushTs,
     };
 
-    const { error } = await supabase
-      .from('uut_entries')
-      .upsert(row, { onConflict: 'uuid' });
+    rows.push(row);
+    localUpdates.push({
+      ...e,
+      result:      resolvedResult,
+      sync_status: 'synced',
+      updated_at:  pushTs,
+    });
+  }
 
-    if (error) {
-      console.error('[Sync] Push entry error:', error.message);
-      continue;
+  if (rows.length) {
+    // Send in chunks of 200 to prevent payload limit issues
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + CHUNK_SIZE);
+      const { error } = await supabase
+        .from('uut_entries')
+        .upsert(chunk, { onConflict: 'uuid' });
+
+      if (error) {
+        console.error('[Sync] Push entries chunk error:', error.message);
+      }
     }
 
-    await db.uut_entries.update(e.id, { sync_status: 'synced', updated_at: pushTs });
-    pushed++;
+    await db.uut_entries.bulkPut(localUpdates);
   }
-  return pushed;
+
+  return rows.length;
 }
 
 async function pushConfig() {
@@ -218,9 +245,10 @@ async function pushConfig() {
 /* ── Pull: Supabase → Local ──────────────────────────────────────────── */
 
 /**
- * Fetch all rows from a Supabase table using pagination (bypasses Supabase 1,000 row limit).
+ * Fetch rows from a Supabase table using pagination.
+ * If since (ISO timestamp) is provided, performs incremental delta sync.
  */
-async function fetchAllSupabaseRows(table, orderBy = 'updated_at') {
+async function fetchSupabaseRows(table, orderBy = 'updated_at', since = null) {
   const PAGE_SIZE = 1000;
   let allRows = [];
   let from = 0;
@@ -228,11 +256,16 @@ async function fetchAllSupabaseRows(table, orderBy = 'updated_at') {
 
   while (hasMore) {
     const to = from + PAGE_SIZE - 1;
-    const { data, error } = await supabase
+    let query = supabase
       .from(table)
       .select('*')
-      .order(orderBy, { ascending: false })
-      .range(from, to);
+      .order(orderBy, { ascending: false });
+
+    if (since) {
+      query = query.gt('updated_at', since);
+    }
+
+    const { data, error } = await query.range(from, to);
 
     if (error) {
       console.error(`[Sync] Error fetching ${table} (range ${from}-${to}):`, error.message);
@@ -254,8 +287,8 @@ async function fetchAllSupabaseRows(table, orderBy = 'updated_at') {
   return allRows;
 }
 
-async function pullSessions() {
-  const data = await fetchAllSupabaseRows('sessions');
+async function pullSessions(since = null) {
+  const data = await fetchSupabaseRows('sessions', 'updated_at', since);
   if (!data || !data.length) return 0;
 
   // Build a map of existing local sessions by UUID
@@ -265,7 +298,7 @@ async function pullSessions() {
     if (s.uuid) uuidMap[s.uuid] = s;
   }
 
-  let pulled = 0;
+  const upserts = [];
   for (const remote of data) {
     const existing = uuidMap[remote.uuid];
 
@@ -277,7 +310,8 @@ async function pullSessions() {
         : 0;
 
       if (remoteTs > localTs) {
-        await db.sessions.update(existing.id, {
+        upserts.push({
+          ...existing,
           operator:    remote.operator,
           chamber:     remote.chamber,
           station:     remote.station,
@@ -290,11 +324,10 @@ async function pullSessions() {
           sync_status: 'synced',
           updated_at:  remote.updated_at,
         });
-        pulled++;
       }
     } else {
       // New session from another device – insert locally
-      await db.sessions.add({
+      upserts.push({
         uuid:        remote.uuid,
         operator:    remote.operator,
         chamber:     remote.chamber,
@@ -308,14 +341,17 @@ async function pullSessions() {
         sync_status: 'synced',
         updated_at:  remote.updated_at,
       });
-      pulled++;
     }
   }
-  return pulled;
+
+  if (upserts.length) {
+    await db.sessions.bulkPut(upserts);
+  }
+  return upserts.length;
 }
 
-async function pullEntries() {
-  const data = await fetchAllSupabaseRows('uut_entries');
+async function pullEntries(since = null) {
+  const data = await fetchSupabaseRows('uut_entries', 'updated_at', since);
   if (!data || !data.length) return 0;
 
   // Build maps
@@ -332,7 +368,7 @@ async function pullEntries() {
     if (s.uuid) sessUuidToLocalId[s.uuid] = s.id;
   }
 
-  let pulled = 0;
+  const upserts = [];
   for (const remote of data) {
     const localSessionId = sessUuidToLocalId[remote.session_uuid];
     if (localSessionId == null) continue; // session not known locally yet
@@ -353,7 +389,8 @@ async function pullEntries() {
           ? (remote.result || '')
           : (existing.result || '');
 
-        await db.uut_entries.update(existing.id, {
+        upserts.push({
+          ...existing,
           session_id:    localSessionId,
           channel:       remote.channel,
           uut_serial:    remote.uut_serial || '',
@@ -365,10 +402,9 @@ async function pullEntries() {
           sync_status:   'synced',
           updated_at:    remote.updated_at,
         });
-        pulled++;
       }
     } else {
-      await db.uut_entries.add({
+      upserts.push({
         uuid:          remote.uuid,
         session_id:    localSessionId,
         channel:       remote.channel,
@@ -381,10 +417,13 @@ async function pullEntries() {
         sync_status:   'synced',
         updated_at:    remote.updated_at,
       });
-      pulled++;
     }
   }
-  return pulled;
+
+  if (upserts.length) {
+    await db.uut_entries.bulkPut(upserts);
+  }
+  return upserts.length;
 }
 
 async function pullConfig() {
@@ -392,7 +431,7 @@ async function pullConfig() {
     .from('config')
     .select('*')
     .eq('key', 'settings')
-    .single();
+    .maybeSingle();
 
   if (error || !data) return 0;
 
@@ -419,7 +458,7 @@ async function pullConfig() {
 let _syncing = false;
 let _syncQueued = false;
 
-export async function syncAll() {
+export async function syncAll(forceFull = false) {
   if (!syncEnabled || !supabase) return;
   if (_syncing) {
     _syncQueued = true;
@@ -430,18 +469,29 @@ export async function syncAll() {
   setStatus('syncing', 'Syncing…');
 
   try {
-    // Push local changes first
+    // 1. Push local changes first in bulk
     const pushedSess    = await pushSessions();
     const pushedEntries = await pushEntries();
     const pushedConfig  = await pushConfig();
 
-    // Then pull remote changes
-    const pulledSess    = await pullSessions();
-    const pulledEntries = await pullEntries();
+    // 2. Compute delta timestamp (with 2-minute safety buffer for clock differences)
+    let pullSince = null;
+    if (!forceFull) {
+      const lastPull = localStorage.getItem('ctl_last_pulled_at');
+      if (lastPull) {
+        pullSince = new Date(new Date(lastPull).getTime() - 120000).toISOString();
+      }
+    }
+
+    // 3. Pull remote changes (delta if pullSince is present)
+    const pulledSess    = await pullSessions(pullSince);
+    const pulledEntries = await pullEntries(pullSince);
     const pulledConfig  = await pullConfig();
 
     const totalPushed = pushedSess + pushedEntries + pushedConfig;
     const totalPulled = pulledSess + pulledEntries + pulledConfig;
+
+    localStorage.setItem('ctl_last_pulled_at', new Date().toISOString());
 
     if (totalPushed || totalPulled) {
       console.log(`[Sync] Pushed ${totalPushed}, Pulled ${totalPulled}`);
@@ -455,7 +505,7 @@ export async function syncAll() {
     _syncing = false;
     if (_syncQueued) {
       _syncQueued = false;
-      setTimeout(() => syncAll(), 50);
+      setTimeout(() => syncAll(), 250);
     }
   }
 }

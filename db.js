@@ -104,6 +104,7 @@ export async function dbSaveEntries(sid, rows) {
 
   const now = new Date().toISOString();
   const upserts = [];
+  let hasChanges = false;
 
   for (const r of rows) {
     const hasData = r.uut_serial || r.cable_serial;
@@ -111,22 +112,44 @@ export async function dbSaveEntries(sid, rows) {
 
     if (hasData) {
       if (existing) {
-        upserts.push({ ...existing, ...r, sync_status: 'pending', updated_at: now });
+        const isUnchanged =
+          (existing.uut_serial || '') === (r.uut_serial || '') &&
+          (existing.cable_serial || '') === (r.cable_serial || '') &&
+          (existing.backplane || '') === (r.backplane || '') &&
+          (existing.notes || '') === (r.notes || '') &&
+          (existing.failure_notes || '') === (r.failure_notes || '') &&
+          (existing.result || '') === (r.result || '');
+
+        if (!isUnchanged) {
+          upserts.push({ ...existing, ...r, sync_status: 'pending', updated_at: now });
+          hasChanges = true;
+        }
       } else {
         upserts.push({ ...r, session_id: sid, uuid: crypto.randomUUID(), sync_status: 'pending', updated_at: now });
+        hasChanges = true;
       }
     } else if (existing) {
-      upserts.push({
-        ...existing,
-        uut_serial: '', cable_serial: '', backplane: '', notes: '', failure_notes: '', result: '',
-        sync_status: 'pending', updated_at: now
-      });
+      const isAlreadyBlank =
+        !existing.uut_serial && !existing.cable_serial && !existing.backplane &&
+        !existing.notes && !existing.failure_notes && !existing.result;
+
+      if (!isAlreadyBlank) {
+        upserts.push({
+          ...existing,
+          uut_serial: '', cable_serial: '', backplane: '', notes: '', failure_notes: '', result: '',
+          sync_status: 'pending', updated_at: now
+        });
+        hasChanges = true;
+      }
     }
   }
 
-  console.log(`[DB] Saving ${upserts.length} entries for session ${sid}:`, upserts);
-  if (upserts.length) await db.uut_entries.bulkPut(upserts);
-  await db.sessions.update(sid, { sync_status: 'pending', updated_at: now });
+  if (upserts.length) {
+    await db.uut_entries.bulkPut(upserts);
+  }
+  if (hasChanges) {
+    await db.sessions.update(sid, { sync_status: 'pending', updated_at: now });
+  }
 }
 
 export async function dbAllSessions() {

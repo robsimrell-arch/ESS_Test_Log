@@ -3010,7 +3010,7 @@ function bindEvents() {
   const syncBtn = $('#btn-sync');
   if (syncBtn) {
     syncBtn.addEventListener('click', async () => {
-      await syncAll();
+      await syncAll(true);
       await refreshStats();
     });
   }
