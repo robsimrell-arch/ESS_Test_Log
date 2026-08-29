@@ -60,33 +60,40 @@ async function pushSessions() {
 
   if (!pending.length) return 0;
 
-  const pushTs = new Date().toISOString();
-  const rows = [];
-  const localUpdates = [];
-
+  // Ensure UUIDs for all pending sessions
   for (const s of pending) {
     if (!s.uuid) {
       s.uuid = newUUID();
       await db.sessions.update(s.id, { uuid: s.uuid });
     }
+  }
 
-    const isBlanked = !s.chamber && !s.part_number && !s.operator;
-    let remoteStartTime = null;
-    let remoteEndTime = null;
-    let remoteClosedBy = '';
+  // Batch query remote records for active sessions to merge start_time/end_time/closed_by
+  const activePendingUuids = pending
+    .filter(s => Boolean(s.chamber || s.part_number || s.operator) && s.uuid)
+    .map(s => s.uuid);
 
-    if (!isBlanked) {
-      const { data: existing } = await supabase
-        .from('sessions')
-        .select('start_time, end_time, closed_by')
-        .eq('uuid', s.uuid)
-        .maybeSingle();
-      if (existing) {
-        remoteStartTime = existing.start_time;
-        remoteEndTime = existing.end_time;
-        remoteClosedBy = existing.closed_by;
+  const remoteSessionMap = {};
+  if (activePendingUuids.length) {
+    const { data: remoteSessions } = await supabase
+      .from('sessions')
+      .select('uuid, start_time, end_time, closed_by')
+      .in('uuid', activePendingUuids);
+
+    if (remoteSessions) {
+      for (const r of remoteSessions) {
+        remoteSessionMap[r.uuid] = r;
       }
     }
+  }
+
+  const pushTs = new Date().toISOString();
+  const rows = [];
+  const localUpdates = [];
+
+  for (const s of pending) {
+    const isBlanked = !s.chamber && !s.part_number && !s.operator;
+    const remote = remoteSessionMap[s.uuid];
 
     const row = {
       uuid:        s.uuid,
@@ -95,10 +102,10 @@ async function pushSessions() {
       station:     s.station || '',
       part_number: s.part_number || '',
       test_type:   s.test_type || '',
-      start_time:  isBlanked ? null : (s.start_time || remoteStartTime || null),
-      end_time:    isBlanked ? null : (s.end_time || remoteEndTime || null),
+      start_time:  isBlanked ? null : (s.start_time || (remote ? remote.start_time : null) || null),
+      end_time:    isBlanked ? null : (s.end_time || (remote ? remote.end_time : null) || null),
       created_at:  s.created_at || '',
-      closed_by:   isBlanked ? '' : (s.closed_by || remoteClosedBy || ''),
+      closed_by:   isBlanked ? '' : (s.closed_by || (remote ? remote.closed_by : '') || ''),
       updated_at:  pushTs,
     };
 
@@ -298,7 +305,8 @@ async function pullSessions(since = null) {
     if (s.uuid) uuidMap[s.uuid] = s;
   }
 
-  const upserts = [];
+  const updates = [];
+  const inserts = [];
   for (const remote of data) {
     const existing = uuidMap[remote.uuid];
 
@@ -310,7 +318,7 @@ async function pullSessions(since = null) {
         : 0;
 
       if (remoteTs > localTs) {
-        upserts.push({
+        updates.push({
           ...existing,
           operator:    remote.operator,
           chamber:     remote.chamber,
@@ -327,7 +335,7 @@ async function pullSessions(since = null) {
       }
     } else {
       // New session from another device – insert locally
-      upserts.push({
+      inserts.push({
         uuid:        remote.uuid,
         operator:    remote.operator,
         chamber:     remote.chamber,
@@ -344,10 +352,13 @@ async function pullSessions(since = null) {
     }
   }
 
-  if (upserts.length) {
-    await db.sessions.bulkPut(upserts);
+  if (updates.length) {
+    await db.sessions.bulkPut(updates);
   }
-  return upserts.length;
+  if (inserts.length) {
+    await db.sessions.bulkAdd(inserts);
+  }
+  return updates.length + inserts.length;
 }
 
 async function pullEntries(since = null) {
@@ -368,7 +379,8 @@ async function pullEntries(since = null) {
     if (s.uuid) sessUuidToLocalId[s.uuid] = s.id;
   }
 
-  const upserts = [];
+  const updates = [];
+  const inserts = [];
   for (const remote of data) {
     const localSessionId = sessUuidToLocalId[remote.session_uuid];
     if (localSessionId == null) continue; // session not known locally yet
@@ -389,7 +401,7 @@ async function pullEntries(since = null) {
           ? (remote.result || '')
           : (existing.result || '');
 
-        upserts.push({
+        updates.push({
           ...existing,
           session_id:    localSessionId,
           channel:       remote.channel,
@@ -404,7 +416,7 @@ async function pullEntries(since = null) {
         });
       }
     } else {
-      upserts.push({
+      inserts.push({
         uuid:          remote.uuid,
         session_id:    localSessionId,
         channel:       remote.channel,
@@ -420,10 +432,13 @@ async function pullEntries(since = null) {
     }
   }
 
-  if (upserts.length) {
-    await db.uut_entries.bulkPut(upserts);
+  if (updates.length) {
+    await db.uut_entries.bulkPut(updates);
   }
-  return upserts.length;
+  if (inserts.length) {
+    await db.uut_entries.bulkAdd(inserts);
+  }
+  return updates.length + inserts.length;
 }
 
 async function pullConfig() {
@@ -500,6 +515,7 @@ export async function syncAll(forceFull = false) {
     setStatus('online', `Synced • ↑${totalPushed} ↓${totalPulled}`);
   } catch (err) {
     console.error('[Sync] syncAll error:', err);
+    _syncQueued = false;
     setStatus('offline', 'Sync failed');
   } finally {
     _syncing = false;
