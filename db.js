@@ -404,6 +404,30 @@ export async function getUutTestCounts(serial) {
 
 export const DATA_CUTOFF_MS = new Date('2026-04-11T08:53:15').getTime();
 
+// Units completed route - Passed before Chamber Test Log was completely implemented
+export const AWAITING_MINI_EXCLUDED_SERIALS = new Set([
+  'BH0426BAE0294',
+  'BH0426BAE0345',
+  'BH0426BAE0310',
+  'BH0426BAE0084',
+  'BH0426BAE0297',
+  'BH0426BAE0167',
+  'BH0426BAE0391',
+  'BH0426BAE0206',
+  'BH0426BAE0263',
+  'BH0426BAE0157',
+  'BH0426BAE0236',
+  'BH0426BAE0181',
+  'BH0426BAE0221',
+  'BH0426BAE0126',
+  'BH0426BAE0105',
+  'BH0426BAE0311',
+  'BH1526BAE0063',
+  'BH2526BAE0069',
+  'BH2526BAE0072',
+  'BH2526BAE0096',
+]);
+
 /**
  * Retrieve all unique UUTs that have failed a Full Test and are awaiting a Mini Test.
  * A UUT qualifies if:
@@ -448,6 +472,9 @@ export async function getAwaitingMiniTestUuts() {
     const serialTrimmed = e.uut_serial.trim();
     // Exclude any serial numbers that do not begin with "BH" (case-insensitive)
     if (!serialTrimmed.toLowerCase().startsWith('bh')) continue;
+
+    // Units completed route - Passed before Chamber Test Log was completely implemented
+    if (AWAITING_MINI_EXCLUDED_SERIALS.has(serialTrimmed.toUpperCase())) continue;
 
     const lc = serialTrimmed.toLowerCase();
     if (!uutMap.has(lc)) {
