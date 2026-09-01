@@ -1022,16 +1022,112 @@ function closeSession(sess) {
    Session History View
    ═══════════════════════════════════════════════════════════════════════════ */
 let historyData = [];
-async function loadHistory() {
-  showView('view-history');
-  // Sync first to ensure we have data from all devices
-  if (isSyncEnabled()) await syncAll();
-  historyData = await dbAllSessions();
+let historySortKey = 'end_time';
+let historySortRev = true; // default: newest End Time first
+
+const HISTORY_COLS = [
+  { key: 'id',          label: 'ID' },
+  { key: 'operator',    label: 'Started By' },
+  { key: 'chamber',     label: 'Chamber' },
+  { key: 'station',     label: 'Station' },
+  { key: 'part_number', label: 'Part Number' },
+  { key: 'test_type',   label: 'Test Type' },
+  { key: 'start_time',  label: 'Start Time' },
+  { key: 'end_time',    label: 'End Time' },
+  { key: 'closed_by',   label: 'Closed By' },
+];
+
+function buildHistoryHead() {
+  const thead = $('#history-table thead');
+  if (!thead) return;
+  thead.innerHTML = '';
+
+  const tr = document.createElement('tr');
+  for (const col of HISTORY_COLS) {
+    const th = document.createElement('th');
+    th.className = 'sortable';
+    th.dataset.key = col.key;
+    let arrow = '';
+    if (historySortKey === col.key) {
+      arrow = historySortRev ? ' ▼' : ' ▲';
+    }
+    th.textContent = col.label + arrow;
+    th.addEventListener('click', () => {
+      if (historySortKey === col.key) {
+        historySortRev = !historySortRev;
+      } else {
+        historySortKey = col.key;
+        historySortRev = (col.key === 'end_time' || col.key === 'start_time' || col.key === 'id');
+      }
+      buildHistoryHead();
+      renderHistoryTable();
+    });
+    tr.appendChild(th);
+  }
+
+  // Non-sortable Actions column (print & delete)
+  const actionTh = document.createElement('th');
+  actionTh.textContent = '';
+  tr.appendChild(actionTh);
+
+  thead.appendChild(tr);
+}
+
+function sortHistoryList(list) {
+  return [...list].sort((a, b) => {
+    if (historySortKey === 'end_time') {
+      const hasEndA = Boolean(a.end_time);
+      const hasEndB = Boolean(b.end_time);
+
+      // Active sessions (no end_time) always pin to top in descending mode
+      if (!hasEndA && !hasEndB) {
+        const stDiff = (b.start_time || '').localeCompare(a.start_time || '');
+        return stDiff !== 0 ? stDiff : (b.id - a.id);
+      }
+      if (!hasEndA) return historySortRev ? -1 : 1;
+      if (!hasEndB) return historySortRev ? 1 : -1;
+
+      const diff = a.end_time.localeCompare(b.end_time);
+      if (diff !== 0) return historySortRev ? -diff : diff;
+
+      const stDiff = (b.start_time || '').localeCompare(a.start_time || '');
+      return stDiff !== 0 ? stDiff : (b.id - a.id);
+    }
+
+    if (historySortKey === 'id') {
+      const diff = a.id - b.id;
+      return historySortRev ? -diff : diff;
+    }
+
+    if (historySortKey === 'start_time') {
+      const diff = (a.start_time || '').localeCompare(b.start_time || '');
+      if (diff !== 0) return historySortRev ? -diff : diff;
+      return b.id - a.id;
+    }
+
+    const valA = String(a[historySortKey] || '').toLowerCase();
+    const valB = String(b[historySortKey] || '').toLowerCase();
+    const diff = valA.localeCompare(valB);
+    if (diff !== 0) return historySortRev ? -diff : diff;
+
+    const stDiff = (b.start_time || '').localeCompare(a.start_time || '');
+    return stDiff !== 0 ? stDiff : (b.id - a.id);
+  });
+}
+
+function renderHistoryTable() {
   const tbody = $('#history-tbody');
+  if (!tbody) return;
+  const selectedSid = $('#history-tbody tr.selected')?.dataset.sid;
   tbody.innerHTML = '';
-  for (const s of historyData) {
+
+  const sorted = sortHistoryList(historyData);
+  for (const s of sorted) {
     const tr = document.createElement('tr');
     tr.dataset.sid = s.id;
+    if (selectedSid && String(s.id) === String(selectedSid)) {
+      tr.classList.add('selected');
+    }
     tr.innerHTML = `
       <td>${s.id}</td><td>${s.operator}</td><td>${s.chamber}</td><td>${s.station}</td>
       <td>${s.part_number}</td><td>${s.test_type}</td>
@@ -1042,13 +1138,11 @@ async function loadHistory() {
       </td>
     `;
     tr.addEventListener('click', (e) => {
-      // Don't select row if clicking the print or delete button
       if (e.target.closest('.print-btn') || e.target.closest('.sess-del-btn')) return;
       $$('#history-tbody tr').forEach(r => r.classList.remove('selected'));
       tr.classList.add('selected');
     });
 
-    // Print handler
     const printBtn = tr.querySelector('.print-btn');
     if (printBtn) {
       printBtn.addEventListener('click', (e) => {
@@ -1057,7 +1151,6 @@ async function loadHistory() {
       });
     }
 
-    // Delete handler
     const delBtn = tr.querySelector('.sess-del-btn');
     if (delBtn) {
       delBtn.addEventListener('click', (e) => {
@@ -1068,6 +1161,15 @@ async function loadHistory() {
 
     tbody.appendChild(tr);
   }
+}
+
+async function loadHistory() {
+  showView('view-history');
+  // Sync first to ensure we have data from all devices
+  if (isSyncEnabled()) await syncAll();
+  historyData = await dbAllSessions();
+  buildHistoryHead();
+  renderHistoryTable();
 }
 
 /**
@@ -1234,7 +1336,7 @@ function exportSelectedSession() {
 }
 
 async function exportAllSessions() {
-  const sessions = await dbAllSessions();
+  const sessions = historyData.length ? sortHistoryList(historyData) : await dbAllSessions();
   let csv = '=== Chamber Test Log – Full Export ===\n';
   csv += `Exported: ${fmtTs(new Date().toISOString())}\n\n`;
   for (const s of sessions) {
