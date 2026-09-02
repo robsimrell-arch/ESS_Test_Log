@@ -14,6 +14,7 @@ import db, {
   dbDeleteUutEntry, dbDeleteSession, dbUpdateUutEntry,
   getUutTestCounts, getAwaitingMiniTestUuts,
   dbPreviewPurge, dbExecutePurge,
+  dbGetLastSetup,
   fmtTs,
 } from './db.js';
 import { initSync, syncAll, startAutoSync, onSyncStatus, watchConnectivity, isSyncEnabled } from './sync.js';
@@ -366,9 +367,76 @@ async function openNewSessionModal() {
   $('#ns-chamber-part').value = '';
   $('#ns-test-type').value = 'Full Test';
 
+  nsLastSetup = null;
+  const autofillGroup = $('#ns-autofill-group');
+  if (autofillGroup) autofillGroup.style.display = 'none';
+  const autofillCb = $('#ns-autofill-setup');
+  if (autofillCb) {
+    autofillCb.checked = true;
+    autofillCb.disabled = false;
+  }
+  const autofillInfo = $('#ns-autofill-info');
+  if (autofillInfo) {
+    autofillInfo.className = 'modal-autofill-info';
+    autofillInfo.textContent = '';
+  }
+
   // Remove any stale compat warning from a previous open
   const existingWarn = $('#ns-compat-warning');
   if (existingWarn) existingWarn.remove();
+}
+
+let nsLastSetup = null;
+
+async function checkNewSessionAutofill() {
+  const cpVal = $('#ns-chamber-part')?.value;
+  const st    = $('#ns-station')?.value?.trim();
+  const group = $('#ns-autofill-group');
+  const cb    = $('#ns-autofill-setup');
+  const info  = $('#ns-autofill-info');
+
+  if (!group || !cb || !info) return;
+
+  if (!cpVal || !st) {
+    group.style.display = 'none';
+    nsLastSetup = null;
+    return;
+  }
+
+  const [ch, pn] = cpVal.split('||');
+  if (!ch || !pn) {
+    group.style.display = 'none';
+    nsLastSetup = null;
+    return;
+  }
+
+  const setup = await dbGetLastSetup(ch, pn, st);
+  nsLastSetup = setup;
+
+  if (setup && setup.entries && setup.entries.length > 0) {
+    group.style.display = 'flex';
+    cb.disabled = false;
+    cb.checked = true;
+    const sessTime = setup.session.start_time || setup.session.created_at || setup.session.end_time;
+    let dateStr = '';
+    if (sessTime) {
+      try {
+        const d = new Date(sessTime);
+        dateStr = d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', year: 'numeric' });
+      } catch (e) {
+        dateStr = fmtTs(sessTime);
+      }
+    }
+    const timeLabel = dateStr ? `Last run on ${dateStr}` : 'Last run';
+    info.className = 'modal-autofill-info';
+    info.textContent = `${timeLabel} (${setup.channelCount} channel${setup.channelCount === 1 ? '' : 's'})`;
+  } else {
+    group.style.display = 'flex';
+    cb.disabled = true;
+    cb.checked = false;
+    info.className = 'modal-autofill-info no-match';
+    info.textContent = 'No previous setup found for this configuration';
+  }
 }
 
 function closeModal() {
@@ -403,9 +471,12 @@ async function confirmNewSession() {
     return;
   }
 
+  const autofillChecked = $('#ns-autofill-setup')?.checked;
+  const autofillEntries = (autofillChecked && nsLastSetup) ? nsLastSetup.entries : null;
+
   const sid = await dbNewSession(op, ch, st, pn, tt);
   closeModal();
-  createSessionView(sid, op, ch, st, pn, tt);
+  createSessionView(sid, op, ch, st, pn, tt, null, autofillEntries);
   await refreshStats();
   if (typeof isSyncEnabled === 'function' && isSyncEnabled()) syncAll();
 }
@@ -500,7 +571,7 @@ async function validateUutRow(r, sess, showWarningToast = false) {
   }
 }
 
-function createSessionView(sid, operator, chamber, station, pn, tt, restoredStart = null) {
+function createSessionView(sid, operator, chamber, station, pn, tt, restoredStart = null, autofillEntries = null) {
   const container = $('#view-session');
 
   const sess = {
@@ -654,6 +725,25 @@ function createSessionView(sid, operator, chamber, station, pn, tt, restoredStar
     div.querySelector('.btn-start-sess').disabled = true;
     div.querySelector('.btn-end-sess').disabled = false;
     startTick(sess);
+  }
+
+  // If autofill entries are provided, populate cable_serial and backplane
+  if (autofillEntries && autofillEntries.length) {
+    const entryMap = {};
+    for (const e of autofillEntries) entryMap[e.channel] = e;
+    let filledCount = 0;
+    for (const row of sess.rows) {
+      const e = entryMap[row.ch];
+      if (!e) continue;
+      const cableInput = row.tr.querySelector('[data-field="cable_serial"]');
+      const bpInput    = row.tr.querySelector('[data-field="backplane"]');
+      if (cableInput && e.cable_serial) cableInput.value = e.cable_serial;
+      if (bpInput && e.backplane) bpInput.value = e.backplane;
+      if ((cableInput && e.cable_serial) || (bpInput && e.backplane)) filledCount++;
+    }
+    // Save to IndexedDB immediately so setup is preserved on refresh or background sync
+    dbSaveEntries(sess.sid, getSessionRowData(sess));
+    toast(`Autofilled ${filledCount} channel setup${filledCount === 1 ? '' : 's'} from previous run.`);
   }
 
   // Show this session view
@@ -3076,6 +3166,8 @@ function bindEvents() {
   // New Session modal
   $('#ns-cancel').addEventListener('click', closeModal);
   $('#ns-confirm').addEventListener('click', confirmNewSession);
+  $('#ns-chamber-part').addEventListener('change', checkNewSessionAutofill);
+  $('#ns-station').addEventListener('change', checkNewSessionAutofill);
 
   // History
   $('#history-refresh').addEventListener('click', loadHistory);

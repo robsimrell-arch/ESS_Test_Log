@@ -107,7 +107,7 @@ export async function dbSaveEntries(sid, rows) {
   let hasChanges = false;
 
   for (const r of rows) {
-    const hasData = r.uut_serial || r.cable_serial;
+    const hasData = r.uut_serial || r.cable_serial || r.backplane;
     const existing = existingMap[r.channel];
 
     if (hasData) {
@@ -167,6 +167,51 @@ export async function dbSessionEntries(sid) {
     }
   }
   return Array.from(latestByChan.values()).sort((a, b) => a.channel - b.channel);
+}
+
+/**
+ * Find the most recent session with matching Chamber, Part Number, and Station
+ * that has at least one cable_serial or backplane recorded.
+ * @param {string} chamber
+ * @param {string} partNumber
+ * @param {string} station
+ * @returns {Promise<{ session: object, entries: object[], channelCount: number } | null>}
+ */
+export async function dbGetLastSetup(chamber, partNumber, station) {
+  if (!chamber || !partNumber || !station) return null;
+
+  // Retrieve candidate sessions matching chamber, part_number, and station
+  const matchingSessions = await db.sessions
+    .filter(s => s.chamber === chamber && s.part_number === partNumber && s.station === station)
+    .toArray();
+
+  if (!matchingSessions.length) return null;
+
+  // Sort descending by end_time, start_time, or created_at
+  matchingSessions.sort((a, b) => {
+    const timeA = a.end_time || a.start_time || a.created_at || '';
+    const timeB = b.end_time || b.start_time || b.created_at || '';
+    if (timeA && timeB) return timeB.localeCompare(timeA);
+    return (b.id || 0) - (a.id || 0);
+  });
+
+  // Check each session in reverse chronological order for valid cable/backplane entries
+  for (const sess of matchingSessions) {
+    const entries = await dbSessionEntries(sess.id);
+    const validEntries = entries.filter(e =>
+      Boolean((e.cable_serial && e.cable_serial.trim()) || (e.backplane && e.backplane.trim()))
+    );
+
+    if (validEntries.length > 0) {
+      return {
+        session: sess,
+        entries: validEntries,
+        channelCount: validEntries.length,
+      };
+    }
+  }
+
+  return null;
 }
 
 /**
